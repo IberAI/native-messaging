@@ -1,0 +1,47 @@
+/target
+# Rust build artifacts
+/target/
+/**/target/
+
+# Build artifacts for debugging and release
+/debug/
+/release/
+
+# Binaries and executables
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.rlib
+
+# Cargo package manager files
+Cargo.lock
+.cargo/
+
+# Generated files and directories
+*.log
+*.rs.bk
+
+# Rust documentation and configuration
+*.rs.bk
+*.rs.old
+doc/
+*.rs.bk
+*.rs~
+
+# IDE and editor files
+/.idea/
+/.vscode/
+/*.iml
+
+# macOS and Unix system files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*~
+*.bak
+
+# Other common unwanted files
+**/node_modules/
