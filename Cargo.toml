@@ -9,7 +9,7 @@ license = "MIT"                            # Ensure a LICENSE file is added to t
 repository = "https://github.com/IberAI/native-messaging"   # Update with your GitHub repository URL
 documentation = "https://docs.rs/native-messaging"
 homepage = "https://github.com/IberAI/native-messaging"     # Update with your GitHub repository URL
-keywords = ["native messaging", "webextensions", "chrome", "firefox"]
+keywords = ["native-messaging", "webextensions", "chrome", "firefox"]
 categories = ["api-bindings", "command-line-utilities"]
 readme = "README.md"
 [dependencies]
