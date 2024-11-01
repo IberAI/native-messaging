@@ -75,31 +75,6 @@ pub fn get_browser_info() -> HashMap<String, BrowserInfo> {
     browser_info
 }
 
-/// Reads the contents of a file into a `String`.
-///
-/// # Arguments
-///
-/// * `filename` - Path to the file to be read.
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::PathBuf;
-/// use native_messaging::install::read_file;
-///
-/// let path = PathBuf::from("example.txt");
-/// match read_file(&path) {
-///     Ok(contents) => println!("File contents: {}", contents),
-///     Err(e) => eprintln!("Failed to read file: {}", e),
-/// }
-/// ```
-fn read_file(filename: &PathBuf) -> io::Result<String> {
-    let mut file = File::open(filename)?;
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    Ok(contents)
-}
-
 /// Writes a `String` to a file.
 ///
 /// # Arguments
