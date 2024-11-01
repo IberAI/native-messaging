@@ -34,7 +34,7 @@ Add this crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-native-messaging-helper = "0.1.0"
+native_messaging= "0.1.0"
 ```
 
 ## Usage
