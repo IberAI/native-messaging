@@ -11,7 +11,7 @@ documentation = "https://docs.rs/native-messaging"
 homepage = "https://github.com/IberAI/native-messaging"     # Update with your GitHub repository URL
 keywords = ["native messaging", "webextensions", "chrome", "firefox"]
 categories = ["api-bindings", "command-line-utilities"]
-
+readme = "README.md"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.132"
