@@ -41,10 +41,10 @@ native_messaging= "0.1.0"
 
 ### Creating and Installing a Manifest
 
-To create and install a native messaging manifest, use the `install::install` function from the `native_messaging` crate with the manifest's name, description, path to the native app, and the target browsers:
+To create and install a native messaging manifest, use the `install::manifest::install` function from the `native_messaging` crate with the manifest's name, description, path to the native app, and the target browsers:
 
 ```rust
-use native_messaging::install::install;
+use native_messaging::install::manifest::install;
 
 fn main() {
     install(
@@ -85,16 +85,18 @@ use serde::Serialize;
 use tokio;
 
 #[derive(Serialize)]
-struct Response {
-    status: String,
-}
+struct MyMessage {
+content: String}
 
-#[tokio::main]
+#[tokio::main()]
 async fn main() {
-    let response = Response { status: "ok".to_string() };
-    send_message(&response).await.expect("Failed to send message");
+let message = MyMessage { content: "Hello, world!".to_string() };
+if let Err(e) = send_message(&message).await {
+eprintln!("Failed to send message: {}", e);
+    }
 }
 ```
+
 
 #### Example: Running an Event Loop
 
@@ -122,7 +124,7 @@ async fn main() {
 You can check if a manifest is installed using `verify` from the `install` module:
 
 ```rust
-use native_messaging::install::verify;
+use native_messaging::install::manifest::verify;
 
 fn main() {
     let installed = verify("my_extension").expect("Verification failed");
@@ -139,7 +141,7 @@ fn main() {
 To remove a previously installed manifest, use `remove` from the `install` module:
 
 ```rust
-use native_messaging::install::remove;
+use native_messaging::install::manifest::remove;
 
 fn main() {
     remove("my_extension", &["chrome", "firefox"]).expect("Failed to remove extension");

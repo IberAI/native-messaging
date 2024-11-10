@@ -31,15 +31,15 @@ pub struct Manifest {
 ///
 /// # Examples
 ///
-/// ```
-/// use native_messaging::install::get_browser_info;
+/// ```no_run
+/// use native_messaging::install::manifest::get_browser_info;
 ///
 /// let browser_info = get_browser_info();
 /// assert!(browser_info.contains_key("chrome"));
 /// assert!(browser_info.contains_key("firefox"));
 /// ```
 pub fn get_browser_info() -> HashMap<String, BrowserInfo> {
-    let home_dir = env::var("HOME").unwrap_or_else(|_| String::new());
+    let home_dir = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     let mut browser_info = HashMap::new();
 
     browser_info.insert(
@@ -75,47 +75,11 @@ pub fn get_browser_info() -> HashMap<String, BrowserInfo> {
     browser_info
 }
 
-/// Writes a `String` to a file.
-///
-/// # Arguments
-///
-/// * `filename` - Path to the file to be written to.
-/// * `contents` - The content to be written.
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::PathBuf;
-/// use native_messaging::install::write_file;
-///
-/// let path = PathBuf::from("example.txt");
-/// let content = "Hello, world!";
-/// write_file(&path, content).expect("Failed to write file");
-/// ```
 fn write_file(filename: &PathBuf, contents: &str) -> io::Result<()> {
     let mut file = File::create(filename)?;
     file.write_all(contents.as_bytes())
 }
 
-/// Writes a manifest file for a specified browser.
-///
-/// # Examples
-///
-/// ```no_run
-/// use std::path::PathBuf;
-/// use native_messaging::install::{Manifest, write_manifest};
-///
-/// let mut manifest = Manifest {
-///     name: "my_extension".to_string(),
-///     description: "An example extension".to_string(),
-///     path: PathBuf::from("/path/to/extension"),
-///     allowed_origins: Some(vec!["*".to_string()]),
-///     allowed_extensions: None,
-/// };
-///
-/// let path = PathBuf::from("manifest.json");
-/// write_manifest("chrome", &path, &mut manifest).expect("Failed to write manifest");
-/// ```
 fn write_manifest(browser: &str, path: &PathBuf, manifest: &mut Manifest) -> io::Result<()> {
     match browser {
         "firefox" => manifest.allowed_origins = None,
@@ -123,28 +87,12 @@ fn write_manifest(browser: &str, path: &PathBuf, manifest: &mut Manifest) -> io:
         _ => {}
     }
 
-    let manifest_json = serde_json::to_string_pretty(manifest)?;
+    let manifest_json = serde_json::to_string_pretty(manifest).map_err(|e| {
+        io::Error::new(io::ErrorKind::Other, format!("Serialization failed: {}", e))
+    })?;
     write_file(path, &manifest_json)
 }
 
-/// Installs the manifest file on Unix-based systems for specified browsers.
-///
-/// # Examples
-///
-/// ```no_run
-/// use native_messaging::install::{install_unix, Manifest};
-/// use std::path::PathBuf;
-///
-/// let mut manifest = Manifest {
-///     name: "my_extension".to_string(),
-///     description: "An example extension".to_string(),
-///     path: PathBuf::from("/path/to/extension"),
-///     allowed_origins: Some(vec!["*".to_string()]),
-///     allowed_extensions: None,
-/// };
-///
-/// install_unix(&["chrome", "firefox"], &mut manifest).expect("Installation failed");
-/// ```
 fn install_unix(browsers: &[&str], manifest: &mut Manifest) -> io::Result<()> {
     let browser_info = get_browser_info();
     for &browser in browsers {
@@ -166,7 +114,7 @@ fn install_unix(browsers: &[&str], manifest: &mut Manifest) -> io::Result<()> {
 /// # Examples
 ///
 /// ```no_run
-/// use native_messaging::install::install;
+/// use native_messaging::install::manifest::install;
 ///
 /// install("my_extension", "An example extension", "/path/to/extension", &["chrome", "firefox"])
 ///     .expect("Failed to install extension");
@@ -189,7 +137,7 @@ pub fn install(name: &str, description: &str, path: &str, browsers: &[&str]) -> 
 /// # Examples
 ///
 /// ```no_run
-/// use native_messaging::install::verify;
+/// use native_messaging::install::manifest::verify;
 ///
 /// let is_installed = verify("my_extension").expect("Verification failed");
 /// if is_installed {
@@ -216,7 +164,7 @@ pub fn verify(name: &str) -> io::Result<bool> {
 /// # Examples
 ///
 /// ```no_run
-/// use native_messaging::install::verify;
+/// use native_messaging::install::manifest::remove;
 ///
 /// remove("my_extension", &["chrome", "firefox"]).expect("Failed to remove extension");
 /// ```

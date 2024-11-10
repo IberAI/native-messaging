@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{self, stdin, stdout, AsyncReadExt, AsyncWriteExt};
 use tokio::select;
 
 /// Encodes a message according to the native messaging protocol.
@@ -50,7 +50,7 @@ where
 /// use native_messaging::host::get_message;
 /// use tokio;
 ///
-/// #[tokio::main]
+/// #[tokio::main()]
 /// async fn main() {
 ///     match get_message().await {
 ///         Ok(message) => println!("Received message: {}", message),
@@ -62,7 +62,7 @@ where
 /// # Errors
 /// Returns an `io::Error` if reading from stdin fails.
 pub async fn get_message() -> io::Result<String> {
-    let mut stdin = io::stdin();
+    let mut stdin = stdin();
     let mut length_bytes = [0u8; 4];
     stdin.read_exact(&mut length_bytes).await?;
     let message_length = u32::from_ne_bytes(length_bytes) as usize;
@@ -88,7 +88,7 @@ pub async fn get_message() -> io::Result<String> {
 ///     content: String,
 /// }
 ///
-/// #[tokio::main]
+/// #[tokio::main()]
 /// async fn main() {
 ///     let message = MyMessage { content: "Hello, world!".to_string() };
 ///     if let Err(e) = send_message(&message).await {
@@ -105,7 +105,7 @@ where
 {
     let encoded_message = encode_message(message_content)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    let mut stdout = io::stdout();
+    let mut stdout = stdout();
     stdout.write_all(&encoded_message).await?;
     stdout.flush().await?;
 
@@ -120,12 +120,12 @@ where
 /// use native_messaging::host::{event_loop, send_message};
 /// use tokio;
 ///
-/// async fn handle_message(message: String) -> io::Result<()> {
+/// async fn handle_message(message: String) -> tokio::io::Result<()> {
 ///     println!("Handling message: {}", message);
 ///     Ok(())
 /// }
 ///
-/// #[tokio::main]
+/// #[tokio::main()]  // Specify runtime flavor to fix compilation issue
 /// async fn main() {
 ///     event_loop(handle_message).await;
 /// }

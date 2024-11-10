@@ -1,18 +1,18 @@
 [package]
 name = "native_messaging"                 # Crate name, must be unique on crates.io
-version = "0.1.0"                          # Initial version, follow semantic versioning
+version = "0.1.1"                          # Initial version, follow semantic versioning
 edition = "2021"                           # Specify Rust edition
 authors = ["Ilteber 'Iber' Dover <ilteber.dover@gmail.com>"]
 
 description = "Async implementation of MDN native messaging. Provides the ability to install host manifest."
-license = "MIT"                            # Ensure a LICENSE file is added to the root of your project
-repository = "https://github.com/IberAI/native-messaging"   # Update with your GitHub repository URL
+license = "MIT" 
+repository = "https://github.com/IberAI/native-messaging" 
 documentation = "https://docs.rs/native-messaging"
-homepage = "https://github.com/IberAI/native-messaging"     # Update with your GitHub repository URL
-keywords = ["native-messaging", "webextensions", "chrome", "firefox"]
+homepage = "https://github.com/IberAI/native-messaging" 
+keywords = ["native messaging", "webextensions", "chrome", "firefox"]
 categories = ["api-bindings", "command-line-utilities"]
 readme = "README.md"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.132"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt", "rt-multi-thread"] }
