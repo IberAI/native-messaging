@@ -9,7 +9,7 @@ license = "MIT"
 repository = "https://github.com/IberAI/native-messaging" 
 documentation = "https://docs.rs/native-messaging"
 homepage = "https://github.com/IberAI/native-messaging" 
-keywords = ["native messaging", "webextensions", "chrome", "firefox"]
+keywords = ["native-messaging", "webextensions", "chrome", "firefox"]
 categories = ["api-bindings", "command-line-utilities"]
 readme = "README.md"
 [dependencies]
