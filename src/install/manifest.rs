@@ -37,8 +37,7 @@ struct FirefoxHostManifest<'a> {
 }
 
 fn ensure_absolute_path(exe_path: &Path) -> io::Result<()> {
-    // Chrome spec: path must be absolute on macOS/Linux. Firefox follows same convention.
-    // Windows allows relative, but absolute is safest cross-platform. :contentReference[oaicite:3]{index=3}
+    // On macOS/Linux the manifest "path" MUST be absolute.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         if !exe_path.is_absolute() {
@@ -48,6 +47,14 @@ fn ensure_absolute_path(exe_path: &Path) -> io::Result<()> {
             ));
         }
     }
+
+    // On Windows we accept any (absolute recommended). Touch exe_path
+    // to avoid an unused-variable warning in Windows builds.
+    #[cfg(windows)]
+    {
+        let _ = exe_path;
+    }
+
     Ok(())
 }
 
