@@ -1,5 +1,3 @@
----
-
 # Native Messaging Helper for WebExtensions
 
 Rust helpers for building **native messaging** hosts for Chrome/Chromium and Firefox. This crate handles:
@@ -11,7 +9,6 @@ Rust helpers for building **native messaging** hosts for Chrome/Chromium and Fir
 
 > Build the parts that matter—leave the manifest details and wire protocol to us.
 
----
 
 ## Goal of this crate
 

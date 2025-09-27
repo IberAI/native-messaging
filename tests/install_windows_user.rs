@@ -1,4 +1,5 @@
 #![cfg(windows)]
+
 use native_messaging::install::manifest::{install, remove, verify, Browser, Scope};
 use native_messaging::install::paths::chrome_user_manifest;
 use serial_test::serial;
@@ -15,13 +16,14 @@ fn install_succeeds_and_writes_chrome_manifest_windows() {
     let name = "com.example.win_host";
     let desc = "Example host";
     let chrome_origin = "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/".to_string();
+    let firefox_id = "native-test@example.com".to_string();
 
     install(
         name,
         desc,
         Path::new(&host_exe),
-        &[chrome_origin],
-        &["native-test@example.com".to_string()],
+        std::slice::from_ref(&chrome_origin),
+        std::slice::from_ref(&firefox_id),
         &[Browser::Chrome],
         Scope::User,
     )

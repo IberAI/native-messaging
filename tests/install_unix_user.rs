@@ -20,13 +20,13 @@ fn install_and_remove_user_scope_writes_correct_files() {
     let chrome_origin = "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/".to_string();
     let firefox_id = "native-test@example.com".to_string();
 
-    // Install both manifests at user scope
+    // Install both manifests at user scope (no clones; build &[String] from a single ref)
     install(
         name,
         desc,
         Path::new(&host_exe),
-        &[chrome_origin.clone()],
-        &[firefox_id.clone()],
+        std::slice::from_ref(&chrome_origin),
+        std::slice::from_ref(&firefox_id),
         &[Browser::Chrome, Browser::Firefox],
         Scope::User,
     )
@@ -76,8 +76,8 @@ fn install_rejects_relative_exe_path_on_unix() {
         "com.example.bad",
         "desc",
         rel,
-        &["chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/".into()],
-        &["native-test@example.com".into()],
+        std::slice::from_ref(&"chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/".to_string()),
+        std::slice::from_ref(&"native-test@example.com".to_string()),
         &[Browser::Chrome, Browser::Firefox],
         Scope::User,
     )
