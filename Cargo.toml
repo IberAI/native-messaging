@@ -1,6 +1,6 @@
 [package]
 name = "native_messaging"                 
-version = "0.1.1" 
+version = "0.1.2" 
 edition = "2021"                           
 authors = ["Ilteber 'Iber' Dover <ilteber.dover@gmail.com>"]
 
@@ -12,7 +12,18 @@ homepage = "https://github.com/IberAI/native-messaging"
 keywords = ["native-messaging", "webextensions", "chrome", "firefox"]
 categories = ["api-bindings", "command-line-utilities"]
 readme = "README.md"
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.132"
 tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt", "rt-multi-thread"] }
+
+[dev-dependencies]
+tempfile = "3"
+serial_test = "3"
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+# only for Windows registry support
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"

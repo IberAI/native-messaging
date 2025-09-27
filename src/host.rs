@@ -4,7 +4,6 @@ use std::io::{self, Read, Write};
 const MAX_TO_BROWSER: usize = 1_048_576; // 1 MB (host -> browser)
 const MAX_FROM_BROWSER: usize = 64 * 1_048_576; // 64 MB (browser -> host)
 
-// CHANGED: take &mut R, not R.
 #[inline]
 fn read_exact_u32_len<R: Read>(r: &mut R) -> io::Result<u32> {
     let mut len_buf = [0u8; 4];
