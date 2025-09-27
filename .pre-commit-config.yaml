@@ -1,5 +1,4 @@
 repos:
-  # General hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
@@ -8,7 +7,6 @@ repos:
       - id: check-yaml
       - id: check-merge-conflict
 
-  # Rust hooks (local) — use your installed toolchain
   - repo: local
     hooks:
       - id: rustfmt
@@ -25,7 +23,7 @@ repos:
         pass_filenames: false
         stages: [commit]
 
-      # Keep tests fast at commit time; run full tests on pre-push
+      # run tests on push (keeps commits fast, pushes safe)
       - id: cargo-test-quick
         name: cargo test (quick)
         entry: bash -lc 'cargo test --all-features --quiet'
