@@ -14,217 +14,107 @@ It exposes two areas:
 The examples below mirror common usage: creating a
 manifest, sending/receiving JSON messages, and running an async loop.
 
----
+## Encode a JSON message into a native-messaging frame
 
-## Quick start
-
-Add deps:
-
-```toml
-[dependencies]
-native_messaging = { path = "." }   # this crate, if you're developing locally
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-```
-
----
-
-## The wire format (tl;dr)
-
-```text
-[0..4)  : 32-bit length (native-endian)
-[4..N)  : UTF-8 JSON payload of that length
-```
-
-Browsers spawn your program and connect **stdin/stdout**; you read frames from
-stdin and write frames to stdout.
-
----
-
-## Messaging examples
-
-### Read a single message
-
-```no_run
-use native_messaging::host::get_message;
-
-#[tokio::main]
-async fn main() {
-    match get_message().await {
-        Ok(json) => println!("Received: {json}"),
-        Err(e)  => eprintln!("Error receiving message: {e}"),
-    }
-}
-```
-
-### Send a single message
-
-```no_run
-use native_messaging::host::send_message;
-use serde::Serialize;
-
-#[derive(Serialize)]
-struct MyMessage { content: String }
-
-#[tokio::main]
-async fn main() -> std::io::Result<()> {
-    let msg = MyMessage { content: "Hello, world!".into() };
-    send_message(&msg).await
-}
-```
-
-### Encode a message to a native-messaging frame
-
-```no_run
+```rust
 use native_messaging::host::encode_message;
 use serde::Serialize;
 
 #[derive(Serialize)]
-struct Msg { hello: String }
-
-fn main() {
-    let frame = encode_message(&Msg { hello: "world".into() })
-        .expect("serialize");
-    assert!(frame.len() >= 4);
+struct Msg {
+    hello: &'static str,
 }
+
+// Encode to a 4-byte-length-prefixed frame:
+let frame = encode_message(&Msg { hello: "world" }).unwrap();
+assert!(frame.len() >= 4);
 ```
 
-### Run an async event loop
+## Read a message and reply on stdout (async)
 
 ```no_run
-use native_messaging::host::{event_loop, send_message};
-
-#[tokio::main]
-async fn main() {
-    event_loop(|raw: String| async move {
-        // Echo the raw JSON back to the browser
-        send_message(&raw).await
-    }).await;
-}
-```
-
-### Structured messages (enums)
-
-```no_run
-use native_messaging::host::{event_loop, send_message};
+use native_messaging::host::{get_message, send_message};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
-#[serde(tag="type", rename_all="snake_case")]
-enum In {
-  Ping { id: u64, payload: String },
-}
+struct In { ping: String }
 
 #[derive(Serialize)]
-struct Out { id: u64, echo: String, ok: bool }
+struct Out { pong: String }
 
-#[tokio::main]
-async fn main() {
-    event_loop(|raw: String| async move {
-        match serde_json::from_str::<In>(&raw) {
-            Ok(In::Ping { id, payload }) => {
-                send_message(&Out { id, echo: payload, ok: true }).await
-            }
-            Err(e) => {
-                eprintln!("bad json: {e}");
-                Ok(())
-            }
-        }
-    }).await;
-}
+// Create a minimal Tokio runtime just for the example:
+let rt = tokio::runtime::Runtime::new().unwrap();
+rt.block_on(async {
+    // Your API returns a raw String
+    let raw = get_message().await.unwrap();
+
+    // Parse to your input type
+    let incoming: In = serde_json::from_str(&raw).unwrap();
+
+    // Build and send a reply
+    let reply = Out { pong: incoming.ping };
+    send_message(&reply).await.unwrap();
+});
 ```
 
----
+## Run the event loop
 
-## Host manifest management
+```no_run
+use native_messaging::host::{event_loop, send_message};
+use serde::Serialize;
+use std::io;
 
-> On macOS/Linux the manifest `path` **must be absolute** (use your built
-> binary path). Chrome/Edge use `allowed_origins`; Firefox uses
-> `allowed_extensions`. This crate abstracts the placement logic per browser.
+#[derive(Serialize)]
+struct Out { pong: String }
 
-### Install for multiple browsers
+// The event loop receives raw String messages and expects the handler future to
+// resolve to io::Result<()>.
+let rt = tokio::runtime::Runtime::new().unwrap();
+rt.block_on(async {
+    event_loop(|msg: String| async move {
+        // In real code, you'd parse `msg` into a structured type first.
+        let reply = Out { pong: msg };
+        send_message(&reply).await?;
+        Ok::<(), io::Error>(())
+    })
+    .await;
+});
+```
 
-```ignore
-// This is marked `ignore` so rustdoc won't try to compile it, because the exact
-// signature of `install` (browsers/enums/scope) depends on your crate version.
-// Use this as a template and adjust types to your API.
+## Create and install a manifest
 
+```no_run
 use std::path::Path;
 use native_messaging::install::manifest::{install, Browser, Scope};
 
-fn main() -> std::io::Result<()> {
-    let path = Path::new("/absolute/path/to/target/release/host-binary");
-    let allowed_origins: Vec<String> = vec![
-        "chrome-extension://your_ext_id/".to_string(),
-        "chrome-extension://another_id/".to_string(),
-    ];
+let name = "com.example.host";
+let description = "Example native messaging host";
+let path = Path::new("/absolute/path/to/target/release/host-binary");
+let allowed_origins: Vec<String> = vec![
+    "chrome-extension://your_ext_id/".to_string(),
+    "chrome-extension://another_id/".to_string(),
+];
+// List of Chrome/Firefox extension IDs that can talk to your host (if applicable)
+let allowed_extensions: Vec<String> = vec![];
 
-    let browsers = &[Browser::Chrome, Browser::Firefox];
+let browsers = &[Browser::Chrome, Browser::Firefox];
 
-    // Adjust arguments to match your `install` signature exactly.
-    install("com.example.host", "Example Host", path, &allowed_origins, browsers, Scope::User)
-}
-```
-
-### Verify / Remove
-
-```ignore
-// Marked `ignore` to avoid signature drift across versions.
-// Adapt to your actual function signatures.
-
-use native_messaging::install::manifest::{verify, remove, Browser, Scope};
-
-fn main() -> std::io::Result<()> {
-    // Some versions take only `name`, others also take browsers/scope.
-    if verify("com.example.host")? {
-        // Adjust remove signature as needed (browsers/scope).
-        remove("com.example.host", &[Browser::Firefox], Scope::User)?;
-    }
-    Ok(())
-}
-```
-
----
-
-## Extension-side (Chrome/Edge MV3)
-
-```javascript
-// background.js
-const port = chrome.runtime.connectNative("com.example.host");
-port.onMessage.addListener(msg => console.log("host:", msg));
-port.postMessage({ type: "ping", payload: "hello", id: 1 });
-```
-
-Ensure your host manifest lists the extension (origin for Chrome/Edge or
-extension ID for Firefox).
-
----
-
-## Troubleshooting
-
-- **No response?** Make sure you write to **stdout** (native messaging uses stdio).
-- **Absolute path**: on macOS/Linux the `path` in the manifest must be **absolute**.
-- Use `verify("com.example.host")` (or your version’s signature) to check install status.
-
----
-
-## About these docs
-
-This file provides a comprehensive crate-level guide (what you see now) and
-then **inlines** the function-level items from your implementation using
-`#[doc(inline)] pub use …` so everything appears in one place in `cargo doc`.
-
-Run:
-
-```sh
-cargo doc --no-deps --open
+// Adjust arguments to your needs; Scope::User for per-user install.
+// NOTE: This matches the signature hinted by the compiler: 
+// install(name: &str, description: &str, path: &Path, allowed_origins: &[String],
+//         allowed_extensions: &[String], browsers: &[Browser], scope: Scope)
+install(
+    name,
+    description,
+    path,
+    &allowed_origins,
+    &allowed_extensions,
+    browsers,
+    Scope::User
+).unwrap();
 ```
 "#]
 
-// ========= Re-export the public API so it appears inline in these docs =========
-
-// Keep using on-disk modules (e.g., src/host.rs, src/install/manifest.rs)
 pub mod host;
 pub mod install;
 
