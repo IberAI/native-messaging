@@ -1,0 +1,34 @@
+repos:
+  # General hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-merge-conflict
+
+  # Rust hooks (local) — use your installed toolchain
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt --check
+        entry: bash -lc 'cargo fmt --all -- --check'
+        language: system
+        pass_filenames: false
+        stages: [commit]
+
+      - id: clippy
+        name: clippy -D warnings
+        entry: bash -lc 'cargo clippy --all-targets --all-features -- -D warnings'
+        language: system
+        pass_filenames: false
+        stages: [commit]
+
+      # Keep tests fast at commit time; run full tests on pre-push
+      - id: cargo-test-quick
+        name: cargo test (quick)
+        entry: bash -lc 'cargo test --all-features --quiet'
+        language: system
+        pass_filenames: false
+        stages: [push]
