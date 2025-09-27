@@ -10,19 +10,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-llvm-cov
 
-      - name: Run coverage (HTML + lcov)
+      # Generate LCOV + HTML reports
+      - name: Run coverage (HTML + LCOV)
         run: |
           cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-          cargo llvm-cov --all-features --workspace --html --output-path target/llvm-cov/html
+          cargo llvm-cov --all-features --workspace --html --output-dir target/llvm-cov/html
 
+      # If you're using Codecov, keep this. If not, you can delete it.
+      - name: Upload LCOV to Codecov
+        if: ${{ success() && vars.USE_CODECOV == 'true' }}
+        uses: codecov/codecov-action@v4
+        with:
+          files: lcov.info
+          fail_ci_if_error: true
+
+      # Always upload HTML as an artifact so you can download & open index.html
       - name: Upload HTML coverage artifact
         uses: actions/upload-artifact@v4
         with:
