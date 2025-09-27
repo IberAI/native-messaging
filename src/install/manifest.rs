@@ -1,184 +1,162 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{
-    collections::HashMap,
-    env,
-    fs::{self, File},
-    io::{self, Write},
-    path::PathBuf,
+    fs, io,
+    path::{Path, PathBuf},
 };
 
-/// Stores information about browser-specific paths and registries for native messaging.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BrowserInfo {
-    pub registry: Option<String>,
-    pub linux: Option<PathBuf>,
-    pub darwin: Option<PathBuf>,
+#[derive(Debug, Clone, Copy)]
+pub enum Browser {
+    Chrome,
+    Firefox,
 }
 
-/// Represents a native messaging manifest.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Manifest {
-    pub name: String,
-    pub description: String,
-    pub path: PathBuf,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub allowed_origins: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub allowed_extensions: Option<Vec<String>>,
+#[derive(Debug, Clone, Copy)]
+pub enum Scope {
+    User,
+    System,
 }
 
-/// Gets information about supported browsers, such as paths for native messaging hosts.
-///
-/// # Examples
-///
-/// ```no_run
-/// use native_messaging::install::manifest::get_browser_info;
-///
-/// let browser_info = get_browser_info();
-/// assert!(browser_info.contains_key("chrome"));
-/// assert!(browser_info.contains_key("firefox"));
-/// ```
-pub fn get_browser_info() -> HashMap<String, BrowserInfo> {
-    let home_dir = env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let mut browser_info = HashMap::new();
-
-    browser_info.insert(
-        "chrome".to_string(),
-        BrowserInfo {
-            registry: Some("Software\\Google\\Chrome\\NativeMessagingHosts".to_string()),
-            linux: Some(PathBuf::from(format!(
-                "{}/.config/google-chrome/NativeMessagingHosts",
-                home_dir
-            ))),
-            darwin: Some(PathBuf::from(format!(
-                "{}/Library/Application Support/Google/Chrome/NativeMessagingHosts",
-                home_dir
-            ))),
-        },
-    );
-
-    browser_info.insert(
-        "firefox".to_string(),
-        BrowserInfo {
-            registry: Some("Software\\Mozilla\\NativeMessagingHosts".to_string()),
-            linux: Some(PathBuf::from(format!(
-                "{}/.mozilla/native-messaging-hosts",
-                home_dir
-            ))),
-            darwin: Some(PathBuf::from(format!(
-                "{}/Library/Application Support/Mozilla/NativeMessagingHosts",
-                home_dir
-            ))),
-        },
-    );
-
-    browser_info
+#[derive(Serialize)]
+struct ChromeHostManifest<'a> {
+    name: &'a str,
+    description: &'a str,
+    path: &'a str,
+    #[serde(rename = "type")]
+    ty: &'a str, // "stdio"
+    allowed_origins: Vec<String>, // chrome-extension://<id>/
 }
 
-fn write_file(filename: &PathBuf, contents: &str) -> io::Result<()> {
-    let mut file = File::create(filename)?;
-    file.write_all(contents.as_bytes())
+#[derive(Serialize)]
+struct FirefoxHostManifest<'a> {
+    name: &'a str,
+    description: &'a str,
+    path: &'a str,
+    #[serde(rename = "type")]
+    ty: &'a str, // "stdio"
+    allowed_extensions: Vec<String>, // Firefox add-on IDs
 }
 
-fn write_manifest(browser: &str, path: &PathBuf, manifest: &mut Manifest) -> io::Result<()> {
-    match browser {
-        "firefox" => manifest.allowed_origins = None,
-        "chrome" => manifest.allowed_extensions = None,
-        _ => {}
-    }
-
-    let manifest_json = serde_json::to_string_pretty(manifest).map_err(|e| {
-        io::Error::new(io::ErrorKind::Other, format!("Serialization failed: {}", e))
-    })?;
-    write_file(path, &manifest_json)
-}
-
-fn install_unix(browsers: &[&str], manifest: &mut Manifest) -> io::Result<()> {
-    let browser_info = get_browser_info();
-    for &browser in browsers {
-        if let Some(info) = browser_info.get(browser) {
-            if let Some(manifest_path) = &info.linux {
-                if !manifest_path.exists() {
-                    fs::create_dir_all(manifest_path)?;
-                }
-                let manifest_file = manifest_path.join(format!("{}.json", manifest.name));
-                write_manifest(browser, &manifest_file, manifest)?;
-            }
+fn ensure_absolute_path(exe_path: &Path) -> io::Result<()> {
+    // Chrome spec: path must be absolute on macOS/Linux. Firefox follows same convention.
+    // Windows allows relative, but absolute is safest cross-platform. :contentReference[oaicite:3]{index=3}
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        if !exe_path.is_absolute() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Manifest `path` must be absolute on macOS/Linux",
+            ));
         }
     }
     Ok(())
 }
 
-/// Installs the manifest file for the given browsers.
-///
-/// # Examples
-///
-/// ```no_run
-/// use native_messaging::install::manifest::install;
-///
-/// install("my_extension", "An example extension", "/path/to/extension", &["chrome", "firefox"])
-///     .expect("Failed to install extension");
-/// ```
-pub fn install(name: &str, description: &str, path: &str, browsers: &[&str]) -> io::Result<()> {
-    let manifest = Manifest {
-        name: name.to_string(),
-        description: description.to_string(),
-        path: PathBuf::from(path),
-        allowed_origins: None,
-        allowed_extensions: None,
-    };
-    let mut manifest = manifest;
-    manifest.path = fs::canonicalize(&manifest.path)?;
-    install_unix(browsers, &mut manifest)
+pub fn install(
+    name: &str,
+    description: &str,
+    exe_path: &Path,
+    chrome_allowed_origins: &[String],
+    firefox_allowed_extensions: &[String],
+    browsers: &[Browser],
+    scope: Scope,
+) -> io::Result<()> {
+    ensure_absolute_path(exe_path)?;
+    for b in browsers {
+        match b {
+            Browser::Chrome => {
+                write_chrome_manifest(name, description, exe_path, chrome_allowed_origins, scope)?
+            }
+            Browser::Firefox => write_firefox_manifest(
+                name,
+                description,
+                exe_path,
+                firefox_allowed_extensions,
+                scope,
+            )?,
+        }
+    }
+    Ok(())
 }
 
-/// Verifies if the manifest file is installed for the specified browsers.
-///
-/// # Examples
-///
-/// ```no_run
-/// use native_messaging::install::manifest::verify;
-///
-/// let is_installed = verify("my_extension").expect("Verification failed");
-/// if is_installed {
-///     println!("Manifest is installed.");
-/// } else {
-///     println!("Manifest is not installed.");
-/// }
-/// ```
+pub fn remove(name: &str, browsers: &[Browser], scope: Scope) -> io::Result<()> {
+    for b in browsers {
+        let path = manifest_path(name, *b, scope)?;
+        if path.exists() {
+            fs::remove_file(path)?;
+        }
+    }
+    #[cfg(windows)]
+    {
+        // also remove Windows registry key for Chrome
+        use crate::install::winreg::remove_chrome_manifest_reg;
+        remove_chrome_manifest_reg(name).ok();
+    }
+    Ok(())
+}
+
 pub fn verify(name: &str) -> io::Result<bool> {
-    let browser_info = get_browser_info();
-    for (_, info) in &browser_info {
-        if let Some(manifest_path) = &info.linux {
-            let manifest_file = manifest_path.join(format!("{}.json", name));
-            if manifest_file.exists() {
-                return Ok(true);
-            }
-        }
-    }
-    Ok(false)
+    let chrome_user = manifest_path(name, Browser::Chrome, Scope::User)?;
+    let firefox_user = manifest_path(name, Browser::Firefox, Scope::User)?;
+    Ok(chrome_user.exists() || firefox_user.exists())
 }
 
-/// Removes the manifest file for specified browsers.
-///
-/// # Examples
-///
-/// ```no_run
-/// use native_messaging::install::manifest::remove;
-///
-/// remove("my_extension", &["chrome", "firefox"]).expect("Failed to remove extension");
-/// ```
-pub fn remove(name: &str, browsers: &[&str]) -> io::Result<()> {
-    let browser_info = get_browser_info();
-    for &browser in browsers {
-        if let Some(info) = browser_info.get(browser) {
-            if let Some(manifest_path) = &info.linux {
-                let manifest_file = manifest_path.join(format!("{}.json", name));
-                if manifest_file.exists() {
-                    fs::remove_file(manifest_file)?;
-                }
-            }
-        }
+fn write_chrome_manifest(
+    name: &str,
+    description: &str,
+    exe_path: &Path,
+    allowed_origins: &[String],
+    scope: Scope,
+) -> io::Result<()> {
+    let m = ChromeHostManifest {
+        name,
+        description,
+        path: exe_path.to_str().unwrap(),
+        ty: "stdio",
+        allowed_origins: allowed_origins.to_vec(),
+    };
+    let out = manifest_path(name, Browser::Chrome, scope)?;
+    if let Some(dir) = out.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::write(out, serde_json::to_vec_pretty(&m)?)?;
+
+    #[cfg(windows)]
+    {
+        // Chrome on Windows requires a registry entry pointing to the manifest path. :contentReference[oaicite:4]{index=4}
+        use crate::install::winreg::write_chrome_manifest_reg;
+        write_chrome_manifest_reg(name)?;
     }
     Ok(())
+}
+
+fn write_firefox_manifest(
+    name: &str,
+    description: &str,
+    exe_path: &Path,
+    allowed_extensions: &[String],
+    scope: Scope,
+) -> io::Result<()> {
+    let m = FirefoxHostManifest {
+        name,
+        description,
+        path: exe_path.to_str().unwrap(),
+        ty: "stdio",
+        allowed_extensions: allowed_extensions.to_vec(),
+    };
+    let out = manifest_path(name, Browser::Firefox, scope)?;
+    if let Some(dir) = out.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::write(out, serde_json::to_vec_pretty(&m)?)?;
+    Ok(())
+}
+
+fn manifest_path(name: &str, browser: Browser, scope: Scope) -> io::Result<PathBuf> {
+    use crate::install::paths::*;
+    match (browser, scope) {
+        (Browser::Chrome, Scope::User) => Ok(chrome_user_manifest(name)),
+        (Browser::Chrome, Scope::System) => Ok(chrome_system_manifest(name)),
+        (Browser::Firefox, Scope::User) => Ok(firefox_user_manifest(name)),
+        (Browser::Firefox, Scope::System) => Ok(firefox_system_manifest(name)),
+    }
 }
