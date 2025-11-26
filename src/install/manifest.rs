@@ -8,6 +8,7 @@ use std::{
 pub enum Browser {
     Chrome,
     Firefox,
+    Edge,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -70,15 +71,28 @@ pub fn install(
     ensure_absolute_path(exe_path)?;
     for b in browsers {
         match b {
-            Browser::Chrome => {
-                write_chrome_manifest(name, description, exe_path, chrome_allowed_origins, scope)?
-            }
+            Browser::Chrome => write_chrome_manifest(
+                name,
+                description,
+                exe_path,
+                chrome_allowed_origins,
+                &manifest_path(name, Browser::Chrome, scope)?,
+                &winreg_path(name, Browser::Chrome)?,
+            )?,
             Browser::Firefox => write_firefox_manifest(
                 name,
                 description,
                 exe_path,
                 firefox_allowed_extensions,
-                scope,
+                &manifest_path(name, Browser::Firefox, scope)?,
+            )?,
+            Browser::Edge => write_chrome_manifest(
+                name,
+                description,
+                exe_path,
+                chrome_allowed_origins,
+                &manifest_path(name, Browser::Edge, scope)?,
+                &winreg_path(name, Browser::Edge)?,
             )?,
         }
     }
@@ -104,7 +118,8 @@ pub fn remove(name: &str, browsers: &[Browser], scope: Scope) -> io::Result<()> 
 pub fn verify(name: &str) -> io::Result<bool> {
     let chrome_user = manifest_path(name, Browser::Chrome, Scope::User)?;
     let firefox_user = manifest_path(name, Browser::Firefox, Scope::User)?;
-    Ok(chrome_user.exists() || firefox_user.exists())
+    let edge_user = manifest_path(name, Browser::Edge, Scope::User)?;
+    Ok(chrome_user.exists() || firefox_user.exists() || edge_user.exists())
 }
 
 fn write_chrome_manifest(
@@ -112,7 +127,8 @@ fn write_chrome_manifest(
     description: &str,
     exe_path: &Path,
     allowed_origins: &[String],
-    scope: Scope,
+    manifest_path: &PathBuf,
+    #[allow(unused_variables)] winreg_path: &String,
 ) -> io::Result<()> {
     let m = ChromeHostManifest {
         name,
@@ -121,17 +137,16 @@ fn write_chrome_manifest(
         ty: "stdio",
         allowed_origins: allowed_origins.to_vec(),
     };
-    let out = manifest_path(name, Browser::Chrome, scope)?;
-    if let Some(dir) = out.parent() {
+    if let Some(dir) = manifest_path.parent() {
         fs::create_dir_all(dir)?;
     }
-    fs::write(out, serde_json::to_vec_pretty(&m)?)?;
+    fs::write(manifest_path, serde_json::to_vec_pretty(&m)?)?;
 
     #[cfg(windows)]
     {
         // Chrome on Windows requires a registry entry pointing to the manifest path. :contentReference[oaicite:4]{index=4}
         use crate::install::winreg::write_chrome_manifest_reg;
-        write_chrome_manifest_reg(name)?;
+        write_chrome_manifest_reg(winreg_path)?;
     }
     Ok(())
 }
@@ -141,7 +156,7 @@ fn write_firefox_manifest(
     description: &str,
     exe_path: &Path,
     allowed_extensions: &[String],
-    scope: Scope,
+    out: &PathBuf,
 ) -> io::Result<()> {
     let m = FirefoxHostManifest {
         name,
@@ -150,7 +165,7 @@ fn write_firefox_manifest(
         ty: "stdio",
         allowed_extensions: allowed_extensions.to_vec(),
     };
-    let out = manifest_path(name, Browser::Firefox, scope)?;
+    // let out = manifest_path(name, Browser::Firefox, scope)?;
     if let Some(dir) = out.parent() {
         fs::create_dir_all(dir)?;
     }
@@ -165,5 +180,19 @@ fn manifest_path(name: &str, browser: Browser, scope: Scope) -> io::Result<PathB
         (Browser::Chrome, Scope::System) => Ok(chrome_system_manifest(name)),
         (Browser::Firefox, Scope::User) => Ok(firefox_user_manifest(name)),
         (Browser::Firefox, Scope::System) => Ok(firefox_system_manifest(name)),
+        (Browser::Edge, Scope::User) => Ok(edge_user_manifest(name)),
+        (Browser::Edge, Scope::System) => Ok(edge_system_manifest(name)),
+    }
+}
+
+fn winreg_path(name: &str, browser: Browser) -> io::Result<String> {
+    use crate::install::paths::*;
+    match browser {
+        Browser::Chrome => Ok(chrome_winreg_path(name)),
+        Browser::Firefox => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "no registry for Firefox",
+        )),
+        Browser::Edge => Ok(edge_winreg_path(name)),
     }
 }
