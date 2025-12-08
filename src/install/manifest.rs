@@ -146,7 +146,7 @@ fn write_chrome_manifest(
     {
         // Chrome on Windows requires a registry entry pointing to the manifest path. :contentReference[oaicite:4]{index=4}
         use crate::install::winreg::write_chrome_manifest_reg;
-        write_chrome_manifest_reg(winreg_path)?;
+        write_chrome_manifest_reg(name, winreg_path)?;
     }
     Ok(())
 }

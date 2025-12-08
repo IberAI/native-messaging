@@ -4,7 +4,7 @@ use winreg::{enums::HKEY_CURRENT_USER, RegKey};
 
 /// Write the Chrome native-messaging registry value under HKCU so Chrome
 /// can find the manifest file at the given host `name`.
-pub fn write_chrome_manifest_reg(path: &str) -> io::Result<()> {
+pub fn write_chrome_manifest_reg(name: &str, path: &str) -> io::Result<()> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let (key, _) = hkcu.create_subkey(&path)?;
     let manifest_path: PathBuf = chrome_user_manifest(name);
