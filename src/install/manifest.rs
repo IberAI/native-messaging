@@ -128,7 +128,7 @@ fn write_chrome_manifest(
     exe_path: &Path,
     allowed_origins: &[String],
     manifest_path: &PathBuf,
-    #[allow(unused_variables)] winreg_path: &String,
+    #[allow(unused_variables)] winreg_path: &str,
 ) -> io::Result<()> {
     let m = ChromeHostManifest {
         name,
