@@ -24,7 +24,7 @@ fn install_succeeds_and_writes_chrome_manifest_windows() {
         Path::new(&host_exe),
         std::slice::from_ref(&chrome_origin),
         std::slice::from_ref(&firefox_id),
-        &[Browser::Chrome],
+        &[Browser::Chrome, Browser::Edge],
         Scope::User,
     )
     .expect("install");
