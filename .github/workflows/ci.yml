@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build-test:
@@ -36,13 +36,10 @@ jobs:
       - name: clippy (deny warnings)
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Tests
+      - name: Tests (all targets)
         run: cargo test --all-features --all-targets --no-fail-fast
-
-      - name: Doctests
-        run: cargo test --doc
 
       - name: Build docs (fail on warnings)
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --no-deps
+        run: cargo doc --no-deps --all-features

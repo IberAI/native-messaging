@@ -3,15 +3,23 @@ name: Coverage
 on:
   pull_request:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   llvm-cov:
+    name: llvm-cov (ubuntu)
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -21,13 +29,13 @@ jobs:
         with:
           tool: cargo-llvm-cov
 
-      # Generate LCOV + HTML reports
-      - name: Run coverage (HTML + LCOV)
-        run: |
-          cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-          cargo llvm-cov --all-features --workspace --html --output-dir target/llvm-cov/html
+      - name: Run coverage (LCOV)
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
-      # If you're using Codecov, keep this. If not, you can delete it.
+      - name: Run coverage (HTML)
+        run: cargo llvm-cov --all-features --workspace --html --output-dir target/llvm-cov/html
+
+      # Upload to Codecov only if you enable it for the repo.
       - name: Upload LCOV to Codecov
         if: ${{ success() && vars.USE_CODECOV == 'true' }}
         uses: codecov/codecov-action@v4
@@ -35,7 +43,6 @@ jobs:
           files: lcov.info
           fail_ci_if_error: true
 
-      # Always upload HTML as an artifact so you can download & open index.html
       - name: Upload HTML coverage artifact
         uses: actions/upload-artifact@v4
         with:
