@@ -1,0 +1,139 @@
+schema_version = 1
+
+[browsers]
+
+[browsers.chrome]
+family = "chromium"
+windows_registry = true
+
+[browsers.chrome.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+[browsers.chrome.paths.macos.system]
+dir = "/Library/Google/Chrome/NativeMessagingHosts"
+[browsers.chrome.paths.linux.user]
+dir = "{HOME}/.config/google-chrome/NativeMessagingHosts"
+[browsers.chrome.paths.linux.system]
+dir = "/etc/opt/chrome/native-messaging-hosts"
+[browsers.chrome.paths.windows.user]
+dir = "{LOCALAPPDATA}/NativeMessagingHosts"
+[browsers.chrome.paths.windows.system]
+dir = "{PROGRAMDATA}/NativeMessagingHosts"
+[browsers.chrome.windows.registry]
+hkcu_key_template = "Software\\Google\\Chrome\\NativeMessagingHosts\\{name}"
+hklm_key_template = "Software\\Google\\Chrome\\NativeMessagingHosts\\{name}"
+
+
+[browsers.edge]
+family = "chromium"
+windows_registry = true
+
+[browsers.edge.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
+[browsers.edge.paths.macos.system]
+dir = "/Library/Microsoft/Edge/NativeMessagingHosts"
+[browsers.edge.paths.linux.user]
+dir = "{HOME}/.config/microsoft-edge/NativeMessagingHosts"
+[browsers.edge.paths.linux.system]
+dir = "/etc/opt/edge/native-messaging-hosts"
+[browsers.edge.paths.windows.user]
+dir = "{LOCALAPPDATA}/NativeMessagingHosts"
+[browsers.edge.paths.windows.system]
+dir = "{PROGRAMDATA}/NativeMessagingHosts"
+[browsers.edge.windows.registry]
+hkcu_key_template = "Software\\Microsoft\\Edge\\NativeMessagingHosts\\{name}"
+hklm_key_template = "Software\\Microsoft\\Edge\\NativeMessagingHosts\\{name}"
+
+
+[browsers.chromium]
+family = "chromium"
+windows_registry = true
+
+[browsers.chromium.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Chromium/NativeMessagingHosts"
+[browsers.chromium.paths.macos.system]
+dir = "/Library/Application Support/Chromium/NativeMessagingHosts"
+[browsers.chromium.paths.linux.user]
+dir = "{HOME}/.config/chromium/NativeMessagingHosts"
+[browsers.chromium.paths.linux.system]
+dir = "/etc/chromium/native-messaging-hosts"
+[browsers.chromium.paths.windows.user]
+dir = "{LOCALAPPDATA}/NativeMessagingHosts"
+[browsers.chromium.paths.windows.system]
+dir = "{PROGRAMDATA}/NativeMessagingHosts"
+[browsers.chromium.windows.registry]
+hkcu_key_template = "Software\\Chromium\\NativeMessagingHosts\\{name}"
+hklm_key_template = "Software\\Chromium\\NativeMessagingHosts\\{name}"
+
+
+[browsers.brave]
+family = "chromium"
+windows_registry = true
+
+[browsers.brave.paths.macos.user]
+dir = "{HOME}/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+[browsers.brave.paths.linux.user]
+dir = "{HOME}/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+[browsers.brave.paths.linux.system]
+dir = "/etc/brave/native-messaging-hosts"
+[browsers.brave.paths.windows.user]
+dir = "{LOCALAPPDATA}/NativeMessagingHosts"
+[browsers.brave.paths.windows.system]
+dir = "{PROGRAMDATA}/NativeMessagingHosts"
+[browsers.brave.windows.registry]
+hkcu_key_template = "Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts\\{name}"
+hklm_key_template = "Software\\BraveSoftware\\Brave-Browser\\NativeMessagingHosts\\{name}"
+
+
+[browsers.vivaldi]
+family = "chromium"
+windows_registry = true
+
+[browsers.vivaldi.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Vivaldi/NativeMessagingHosts"
+[browsers.vivaldi.paths.linux.user]
+dir = "{HOME}/.config/vivaldi/NativeMessagingHosts"
+[browsers.vivaldi.paths.windows.user]
+dir = "{LOCALAPPDATA}/NativeMessagingHosts"
+[browsers.vivaldi.paths.windows.system]
+dir = "{PROGRAMDATA}/NativeMessagingHosts"
+[browsers.vivaldi.windows.registry]
+hkcu_key_template = "Software\\Vivaldi\\NativeMessagingHosts\\{name}"
+hklm_key_template = "Software\\Vivaldi\\NativeMessagingHosts\\{name}"
+
+
+[browsers.firefox]
+family = "firefox"
+windows_registry = true
+
+[browsers.firefox.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Mozilla/NativeMessagingHosts"
+[browsers.firefox.paths.macos.system]
+dir = "/Library/Application Support/Mozilla/NativeMessagingHosts"
+[browsers.firefox.paths.linux.user]
+dir = "{HOME}/.mozilla/native-messaging-hosts"
+[browsers.firefox.paths.linux.system]
+dir = "/usr/lib/mozilla/native-messaging-hosts"
+[browsers.firefox.paths.windows.user]
+dir = "{APPDATA}/Mozilla/NativeMessagingHosts"
+[browsers.firefox.paths.windows.system]
+dir = "{PROGRAMDATA}/Mozilla/NativeMessagingHosts"
+[browsers.firefox.windows.registry]
+hkcu_key_template = "Software\\Mozilla\\NativeMessagingHosts\\{name}"
+hklm_key_template = "Software\\Mozilla\\NativeMessagingHosts\\{name}"
+
+
+[browsers.librewolf]
+family = "firefox"
+windows_registry = true
+
+[browsers.librewolf.paths.macos.user]
+dir = "{HOME}/Library/Application Support/LibreWolf/NativeMessagingHosts"
+[browsers.librewolf.paths.linux.user]
+dir = "{HOME}/.librewolf/native-messaging-hosts"
+[browsers.librewolf.paths.windows.user]
+dir = "{APPDATA}/LibreWolf/NativeMessagingHosts"
+[browsers.librewolf.paths.windows.system]
+dir = "{PROGRAMDATA}/LibreWolf/NativeMessagingHosts"
+[browsers.librewolf.windows.registry]
+hkcu_key_template = "Software\\Mozilla\\NativeMessagingHosts\\{name}"
+hklm_key_template = "Software\\Mozilla\\NativeMessagingHosts\\{name}"

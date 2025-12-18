@@ -1,24 +1,15 @@
 use serde::Serialize;
+use serde_json::Value;
 use std::{
-    fs, io,
-    path::{Path, PathBuf},
+    fs,
+    io,
+    path::Path,
 };
 
-#[derive(Debug, Clone, Copy)]
-pub enum Browser {
-    Chrome,
-    Firefox,
-    Edge,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Scope {
-    User,
-    System,
-}
+use crate::install::paths;
 
 #[derive(Serialize)]
-struct ChromeHostManifest<'a> {
+struct ChromiumHostManifest<'a> {
     name: &'a str,
     description: &'a str,
     path: &'a str,
@@ -49,8 +40,6 @@ fn ensure_absolute_path(exe_path: &Path) -> io::Result<()> {
         }
     }
 
-    // On Windows we accept any (absolute recommended). Touch exe_path
-    // to avoid an unused-variable warning in Windows builds.
     #[cfg(windows)]
     {
         let _ = exe_path;
@@ -59,140 +48,192 @@ fn ensure_absolute_path(exe_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Install manifests for the given browser keys (from browsers.toml).
+///
+/// - `chrome_allowed_origins` is used for `family="chromium"` browsers
+/// - `firefox_allowed_extensions` is used for `family="firefox"` browsers
 pub fn install(
-    name: &str,
+    host_name: &str,
     description: &str,
     exe_path: &Path,
     chrome_allowed_origins: &[String],
     firefox_allowed_extensions: &[String],
-    browsers: &[Browser],
-    scope: Scope,
+    browsers: &[&str],
+    scope: paths::Scope,
 ) -> io::Result<()> {
     ensure_absolute_path(exe_path)?;
-    for b in browsers {
-        match b {
-            Browser::Chrome => write_chrome_manifest(
-                name,
-                description,
-                exe_path,
-                chrome_allowed_origins,
-                &manifest_path(name, Browser::Chrome, scope)?,
-                &winreg_path(name, Browser::Chrome)?,
-            )?,
-            Browser::Firefox => write_firefox_manifest(
-                name,
-                description,
-                exe_path,
-                firefox_allowed_extensions,
-                &manifest_path(name, Browser::Firefox, scope)?,
-            )?,
-            Browser::Edge => write_chrome_manifest(
-                name,
-                description,
-                exe_path,
-                chrome_allowed_origins,
-                &manifest_path(name, Browser::Edge, scope)?,
-                &winreg_path(name, Browser::Edge)?,
-            )?,
+
+    for browser_key in browsers {
+        let cfg = paths::browser_cfg(browser_key)?;
+        let manifest_path = paths::manifest_path(browser_key, scope, host_name)?;
+
+        if let Some(dir) = manifest_path.parent() {
+            fs::create_dir_all(dir)?;
+        }
+
+        match cfg.family.as_str() {
+            "chromium" => {
+                let m = ChromiumHostManifest {
+                    name: host_name,
+                    description,
+                    path: exe_path
+                        .to_str()
+                        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "exe_path is not valid UTF-8"))?,
+                    ty: "stdio",
+                    allowed_origins: chrome_allowed_origins.to_vec(),
+                };
+                fs::write(&manifest_path, serde_json::to_vec_pretty(&m)?)?;
+            }
+            "firefox" => {
+                let m = FirefoxHostManifest {
+                    name: host_name,
+                    description,
+                    path: exe_path
+                        .to_str()
+                        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "exe_path is not valid UTF-8"))?,
+                    ty: "stdio",
+                    allowed_extensions: firefox_allowed_extensions.to_vec(),
+                };
+                fs::write(&manifest_path, serde_json::to_vec_pretty(&m)?)?;
+            }
+            other => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unknown browser family '{other}' for browser '{browser_key}'"),
+                ));
+            }
+        }
+
+        // On Windows, write registry pointer if configured.
+        #[cfg(windows)]
+        {
+            if cfg.windows_registry {
+                let key_path = paths::winreg_key_path(browser_key, scope, host_name)?;
+                crate::install::winreg::write_manifest_path_to_reg(scope, &key_path, &manifest_path)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Remove manifests + registry keys for the given browser keys.
+pub fn remove(host_name: &str, browsers: &[&str], scope: paths::Scope) -> io::Result<()> {
+    for browser_key in browsers {
+        let cfg = paths::browser_cfg(browser_key)?;
+
+        // Remove file (best-effort if missing)
+        let manifest_path = paths::manifest_path(browser_key, scope, host_name)?;
+        if manifest_path.exists() {
+            fs::remove_file(&manifest_path)?;
+        }
+
+        // Remove registry pointer if configured.
+        #[cfg(windows)]
+        {
+            if cfg.windows_registry {
+                let key_path = paths::winreg_key_path(browser_key, scope, host_name)?;
+                crate::install::winreg::remove_manifest_reg(scope, &key_path).ok();
+            }
         }
     }
     Ok(())
 }
 
-pub fn remove(name: &str, browsers: &[Browser], scope: Scope) -> io::Result<()> {
-    for b in browsers {
-        let path = manifest_path(name, *b, scope)?;
-        if path.exists() {
-            fs::remove_file(path)?;
+/// Verify installation for a host across browsers.
+/// - If `browsers` is None, checks all configured browsers in `browsers.toml`.
+/// - On Windows, if `windows_registry=true`, verification is registry-aware.
+pub fn verify_installed(
+    host_name: &str,
+    browsers: Option<&[&str]>,
+    scope: paths::Scope,
+) -> io::Result<bool> {
+    let keys: Vec<&str> = match browsers {
+        Some(list) => list.to_vec(),
+        None => paths::config().browsers.keys().map(|k| k.as_str()).collect(),
+    };
+
+    for browser_key in keys {
+        if verify_one(browser_key, host_name, scope)? {
+            return Ok(true);
         }
     }
+    Ok(false)
+}
+
+fn verify_one(browser_key: &str, host_name: &str, scope: paths::Scope) -> io::Result<bool> {
+    let cfg = paths::browser_cfg(browser_key)?;
+
+    // Determine manifest path
     #[cfg(windows)]
-    {
-        // also remove Windows registry key for Chrome
-        use crate::install::winreg::remove_chrome_manifest_reg;
-        remove_chrome_manifest_reg(name).ok();
-    }
-    Ok(())
-}
-
-pub fn verify(name: &str) -> io::Result<bool> {
-    let chrome_user = manifest_path(name, Browser::Chrome, Scope::User)?;
-    let firefox_user = manifest_path(name, Browser::Firefox, Scope::User)?;
-    let edge_user = manifest_path(name, Browser::Edge, Scope::User)?;
-    Ok(chrome_user.exists() || firefox_user.exists() || edge_user.exists())
-}
-
-fn write_chrome_manifest(
-    name: &str,
-    description: &str,
-    exe_path: &Path,
-    allowed_origins: &[String],
-    manifest_path: &PathBuf,
-    #[allow(unused_variables)] winreg_path: &str,
-) -> io::Result<()> {
-    let m = ChromeHostManifest {
-        name,
-        description,
-        path: exe_path.to_str().unwrap(),
-        ty: "stdio",
-        allowed_origins: allowed_origins.to_vec(),
+    let manifest_path = if cfg.windows_registry {
+        let key_path = paths::winreg_key_path(browser_key, scope, host_name)?;
+        match crate::install::winreg::read_manifest_path_from_reg(scope, &key_path)? {
+            Some(p) => p,
+            None => return Ok(false),
+        }
+    } else {
+        paths::manifest_path(browser_key, scope, host_name)?
     };
-    if let Some(dir) = manifest_path.parent() {
-        fs::create_dir_all(dir)?;
-    }
-    fs::write(manifest_path, serde_json::to_vec_pretty(&m)?)?;
 
-    #[cfg(windows)]
-    {
-        // Chrome on Windows requires a registry entry pointing to the manifest path. :contentReference[oaicite:4]{index=4}
-        use crate::install::winreg::write_chrome_manifest_reg;
-        write_chrome_manifest_reg(name, winreg_path)?;
+    #[cfg(not(windows))]
+    let manifest_path = paths::manifest_path(browser_key, scope, host_name)?;
+
+    if !manifest_path.exists() {
+        return Ok(false);
     }
-    Ok(())
+
+    let data = fs::read_to_string(&manifest_path)?;
+    let v: Value = serde_json::from_str(&data).map_err(|e| {
+        io::Error::new(io::ErrorKind::InvalidData, format!("invalid JSON manifest: {e}"))
+    })?;
+
+    validate_manifest_json(&v, &cfg.family, host_name)
 }
 
-fn write_firefox_manifest(
-    name: &str,
-    description: &str,
-    exe_path: &Path,
-    allowed_extensions: &[String],
-    out: &PathBuf,
-) -> io::Result<()> {
-    let m = FirefoxHostManifest {
-        name,
-        description,
-        path: exe_path.to_str().unwrap(),
-        ty: "stdio",
-        allowed_extensions: allowed_extensions.to_vec(),
+fn validate_manifest_json(v: &Value, family: &str, expected_name: &str) -> io::Result<bool> {
+    let obj = match v.as_object() {
+        Some(o) => o,
+        None => return Ok(false),
     };
-    // let out = manifest_path(name, Browser::Firefox, scope)?;
-    if let Some(dir) = out.parent() {
-        fs::create_dir_all(dir)?;
-    }
-    fs::write(out, serde_json::to_vec_pretty(&m)?)?;
-    Ok(())
-}
 
-fn manifest_path(name: &str, browser: Browser, scope: Scope) -> io::Result<PathBuf> {
-    use crate::install::paths::*;
-    match (browser, scope) {
-        (Browser::Chrome, Scope::User) => Ok(chrome_user_manifest(name)),
-        (Browser::Chrome, Scope::System) => Ok(chrome_system_manifest(name)),
-        (Browser::Firefox, Scope::User) => Ok(firefox_user_manifest(name)),
-        (Browser::Firefox, Scope::System) => Ok(firefox_system_manifest(name)),
-        (Browser::Edge, Scope::User) => Ok(edge_user_manifest(name)),
-        (Browser::Edge, Scope::System) => Ok(edge_system_manifest(name)),
+    if obj.get("name").and_then(|x| x.as_str()) != Some(expected_name) {
+        return Ok(false);
     }
-}
+    if obj.get("type").and_then(|x| x.as_str()) != Some("stdio") {
+        return Ok(false);
+    }
+    if obj.get("path").and_then(|x| x.as_str()).is_none() {
+        return Ok(false);
+    }
 
-fn winreg_path(name: &str, browser: Browser) -> io::Result<String> {
-    use crate::install::paths::*;
-    match browser {
-        Browser::Chrome => Ok(chrome_winreg_path(name)),
-        Browser::Firefox => Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "no registry for Firefox",
-        )),
-        Browser::Edge => Ok(edge_winreg_path(name)),
+    match family {
+        "chromium" => {
+            if obj.get("allowed_origins").and_then(|x| x.as_array()).is_none() {
+                return Ok(false);
+            }
+            if obj.contains_key("allowed_extensions") {
+                return Ok(false);
+            }
+        }
+        "firefox" => {
+            if obj.get("allowed_extensions").and_then(|x| x.as_array()).is_none() {
+                return Ok(false);
+            }
+            if obj.contains_key("allowed_origins") {
+                return Ok(false);
+            }
+        }
+        _ => return Ok(false),
     }
+
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let exe = obj.get("path").and_then(|x| x.as_str()).unwrap_or("");
+        if !std::path::Path::new(exe).is_absolute() {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }

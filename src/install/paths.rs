@@ -1,140 +1,174 @@
-use std::path::PathBuf;
+use once_cell::sync::Lazy;
+use serde::Deserialize;
+use std::{collections::HashMap, fs, io, path::PathBuf};
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
-fn unix_home_dir() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .expect("HOME not set")
+const DEFAULT_BROWSERS_TOML: &str = include_str!("browsers.toml");
+
+/// Optional override:
+/// - If NATIVE_MESSAGING_BROWSERS_CONFIG is set, load config from that path.
+/// - Otherwise use the embedded browsers.toml.
+fn load_browsers_toml() -> String {
+    if let Ok(p) = std::env::var("NATIVE_MESSAGING_BROWSERS_CONFIG") {
+        if let Ok(s) = fs::read_to_string(&p) {
+            return s;
+        }
+    }
+    DEFAULT_BROWSERS_TOML.to_string()
 }
 
-pub fn chrome_user_manifest(name: &str) -> PathBuf {
+#[derive(Debug, Clone, Copy)]
+pub enum Scope {
+    User,
+    System,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub schema_version: u32,
+    pub browsers: HashMap<String, BrowserCfg>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BrowserCfg {
+    /// "chromium" or "firefox"
+    pub family: String,
+
+    /// Whether Windows registry pointers should be written
+    #[serde(default)]
+    pub windows_registry: bool,
+
+    pub paths: PathsByOs,
+
+    #[serde(default)]
+    pub windows: Option<WindowsCfg>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct WindowsCfg {
+    #[serde(default)]
+    pub registry: Option<RegistryCfg>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegistryCfg {
+    pub hkcu_key_template: Option<String>,
+    pub hklm_key_template: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PathsByOs {
+    pub macos: Option<Scopes>,
+    pub linux: Option<Scopes>,
+    pub windows: Option<Scopes>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Scopes {
+    pub user: Option<PathEntry>,
+    pub system: Option<PathEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PathEntry {
+    pub dir: String,
+}
+
+static CONFIG: Lazy<Config> = Lazy::new(|| {
+    let raw = load_browsers_toml();
+    let cfg: Config = toml::from_str(&raw).expect("invalid browsers.toml");
+    if cfg.schema_version != 1 {
+        panic!("unsupported schema_version {} (expected 1)", cfg.schema_version);
+    }
+    cfg
+});
+
+pub fn config() -> &'static Config {
+    &CONFIG
+}
+
+pub fn browser_cfg(browser_key: &str) -> io::Result<&'static BrowserCfg> {
+    CONFIG
+        .browsers
+        .get(browser_key)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, format!("unknown browser: {browser_key}")))
+}
+
+/// Resolve the full manifest JSON path for this browser+scope+host.
+pub fn manifest_path(browser_key: &str, scope: Scope, host_name: &str) -> io::Result<PathBuf> {
+    let b = browser_cfg(browser_key)?;
+
+    let scopes = current_os_scopes(&b.paths)?
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "browser not configured for this OS"))?;
+
+    let entry = match scope {
+        Scope::User => scopes.user.as_ref(),
+        Scope::System => scopes.system.as_ref(),
+    }
+    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "scope not configured for this OS"))?;
+
+    let dir = resolve_dir_template(&entry.dir)?;
+    Ok(dir.join(format!("{host_name}.json")))
+}
+
+fn current_os_scopes(paths: &PathsByOs) -> io::Result<Option<&Scopes>> {
     #[cfg(target_os = "macos")]
     {
-        unix_home_dir()
-            .join("Library/Application Support/Google/Chrome/NativeMessagingHosts")
-            .join(format!("{name}.json"))
+        Ok(paths.macos.as_ref())
     }
     #[cfg(target_os = "linux")]
     {
-        unix_home_dir()
-            .join(".config/google-chrome/NativeMessagingHosts")
-            .join(format!("{name}.json"))
+        Ok(paths.linux.as_ref())
     }
     #[cfg(target_os = "windows")]
     {
-        std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(r"C:\Users\Default\AppData\Local"))
-            .join("NativeMessagingHosts")
-            .join(format!("{name}.json"))
+        Ok(paths.windows.as_ref())
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Err(io::Error::new(io::ErrorKind::Other, "unsupported OS"))
     }
 }
 
-pub fn chrome_winreg_path(name: &str) -> String {
-    format!(r"Software\Google\Chrome\NativeMessagingHosts\{name}")
+fn resolve_dir_template(t: &str) -> io::Result<PathBuf> {
+    let mut s = t.to_string();
+
+    // Only replace if referenced; error if referenced but env missing.
+    replace_var(&mut s, "{HOME}", "HOME")?;
+    replace_var(&mut s, "{LOCALAPPDATA}", "LOCALAPPDATA")?;
+    replace_var(&mut s, "{APPDATA}", "APPDATA")?;
+    replace_var(&mut s, "{PROGRAMDATA}", "PROGRAMDATA")?;
+
+    Ok(PathBuf::from(s))
 }
 
-pub fn chrome_system_manifest(name: &str) -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        PathBuf::from(format!(
-            "/Library/Google/Chrome/NativeMessagingHosts/{name}.json"
-        ))
+fn replace_var(s: &mut String, token: &str, env: &str) -> io::Result<()> {
+    if s.contains(token) {
+        let v = std::env::var(env).map_err(|_| {
+            io::Error::new(io::ErrorKind::NotFound, format!("env var {env} not set (needed for {token})"))
+        })?;
+        *s = s.replace(token, &v);
     }
-    #[cfg(target_os = "linux")]
-    {
-        PathBuf::from(format!(
-            "/etc/opt/chrome/native-messaging-hosts/{name}.json"
-        ))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        PathBuf::from(format!(r"C:\ProgramData\NativeMessagingHosts\{name}.json"))
-    }
+    Ok(())
 }
 
-pub fn firefox_user_manifest(name: &str) -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        unix_home_dir()
-            .join("Library/Application Support/Mozilla/NativeMessagingHosts")
-            .join(format!("{name}.json"))
+#[cfg(windows)]
+pub fn winreg_key_path(browser_key: &str, scope: Scope, host_name: &str) -> io::Result<String> {
+    let b = browser_cfg(browser_key)?;
+    if !b.windows_registry {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "registry not enabled for this browser"));
     }
-    #[cfg(target_os = "linux")]
-    {
-        unix_home_dir()
-            .join(".mozilla/native-messaging-hosts")
-            .join(format!("{name}.json"))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(r"C:\Users\Default\AppData\Roaming"))
-            .join("Mozilla\\NativeMessagingHosts")
-            .join(format!("{name}.json"))
-    }
-}
 
-pub fn firefox_system_manifest(name: &str) -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        PathBuf::from(format!("/Library/Mozilla/NativeMessagingHosts/{name}.json"))
-    }
-    #[cfg(target_os = "linux")]
-    {
-        PathBuf::from(format!(
-            "/usr/lib/mozilla/native-messaging-hosts/{name}.json"
-        ))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        PathBuf::from(format!(
-            r"C:\ProgramData\Mozilla\NativeMessagingHosts\{name}.json"
-        ))
-    }
-}
+    let reg = b
+        .windows
+        .as_ref()
+        .and_then(|w| w.registry.as_ref())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "missing [browsers.<x>.windows.registry] config"))?;
 
-pub fn edge_user_manifest(name: &str) -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        unix_home_dir()
-            .join("Library/Application Support/Microsoft Edge/NativeMessagingHosts")
-            .join(format!("{name}.json"))
+    let tmpl = match scope {
+        Scope::User => reg.hkcu_key_template.as_ref(),
+        Scope::System => reg.hklm_key_template.as_ref(),
     }
-    #[cfg(target_os = "linux")]
-    {
-        unix_home_dir()
-            .join(".config/microsoft-edge/NativeMessagingHosts")
-            .join(format!("{name}.json"))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var_os("LOCALAPPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(r"C:\Users\Default\AppData\Local"))
-            .join("NativeMessagingHosts")
-            .join(format!("{name}.json"))
-    }
-}
+    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "missing registry template for this scope"))?;
 
-pub fn edge_winreg_path(name: &str) -> String {
-    format!(r"Software\Microsoft\Edge\NativeMessagingHosts\{name}")
-}
-
-pub fn edge_system_manifest(name: &str) -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        PathBuf::from(format!(
-            "/Library/Microsoft/Edge/NativeMessagingHosts/{name}.json"
-        ))
-    }
-    #[cfg(target_os = "linux")]
-    {
-        PathBuf::from(format!("/etc/opt/edge/native-messaging-hosts/{name}.json"))
-    }
-    #[cfg(target_os = "windows")]
-    {
-        PathBuf::from(format!(r"C:\ProgramData\NativeMessagingHosts\{name}.json"))
-    }
+    Ok(tmpl.replace("{name}", host_name))
 }
