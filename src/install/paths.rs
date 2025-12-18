@@ -77,7 +77,10 @@ static CONFIG: Lazy<Config> = Lazy::new(|| {
     let raw = load_browsers_toml();
     let cfg: Config = toml::from_str(&raw).expect("invalid browsers.toml");
     if cfg.schema_version != 1 {
-        panic!("unsupported schema_version {} (expected 1)", cfg.schema_version);
+        panic!(
+            "unsupported schema_version {} (expected 1)",
+            cfg.schema_version
+        );
     }
     cfg
 });
@@ -87,18 +90,24 @@ pub fn config() -> &'static Config {
 }
 
 pub fn browser_cfg(browser_key: &str) -> io::Result<&'static BrowserCfg> {
-    CONFIG
-        .browsers
-        .get(browser_key)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, format!("unknown browser: {browser_key}")))
+    CONFIG.browsers.get(browser_key).ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("unknown browser: {browser_key}"),
+        )
+    })
 }
 
 /// Resolve the full manifest JSON path for this browser+scope+host.
 pub fn manifest_path(browser_key: &str, scope: Scope, host_name: &str) -> io::Result<PathBuf> {
     let b = browser_cfg(browser_key)?;
 
-    let scopes = current_os_scopes(&b.paths)?
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "browser not configured for this OS"))?;
+    let scopes = current_os_scopes(&b.paths)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "browser not configured for this OS",
+        )
+    })?;
 
     let entry = match scope {
         Scope::User => scopes.user.as_ref(),
@@ -144,7 +153,10 @@ fn resolve_dir_template(t: &str) -> io::Result<PathBuf> {
 fn replace_var(s: &mut String, token: &str, env: &str) -> io::Result<()> {
     if s.contains(token) {
         let v = std::env::var(env).map_err(|_| {
-            io::Error::new(io::ErrorKind::NotFound, format!("env var {env} not set (needed for {token})"))
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("env var {env} not set (needed for {token})"),
+            )
         })?;
         *s = s.replace(token, &v);
     }
@@ -155,20 +167,33 @@ fn replace_var(s: &mut String, token: &str, env: &str) -> io::Result<()> {
 pub fn winreg_key_path(browser_key: &str, scope: Scope, host_name: &str) -> io::Result<String> {
     let b = browser_cfg(browser_key)?;
     if !b.windows_registry {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "registry not enabled for this browser"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "registry not enabled for this browser",
+        ));
     }
 
     let reg = b
         .windows
         .as_ref()
         .and_then(|w| w.registry.as_ref())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "missing [browsers.<x>.windows.registry] config"))?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                "missing [browsers.<x>.windows.registry] config",
+            )
+        })?;
 
     let tmpl = match scope {
         Scope::User => reg.hkcu_key_template.as_ref(),
         Scope::System => reg.hklm_key_template.as_ref(),
     }
-    .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "missing registry template for this scope"))?;
+    .ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "missing registry template for this scope",
+        )
+    })?;
 
     Ok(tmpl.replace("{name}", host_name))
 }

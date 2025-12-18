@@ -1,10 +1,6 @@
 use serde::Serialize;
 use serde_json::Value;
-use std::{
-    fs,
-    io,
-    path::Path,
-};
+use std::{fs, io, path::Path};
 
 use crate::install::paths;
 
@@ -76,9 +72,9 @@ pub fn install(
                 let m = ChromiumHostManifest {
                     name: host_name,
                     description,
-                    path: exe_path
-                        .to_str()
-                        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "exe_path is not valid UTF-8"))?,
+                    path: exe_path.to_str().ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "exe_path is not valid UTF-8")
+                    })?,
                     ty: "stdio",
                     allowed_origins: chrome_allowed_origins.to_vec(),
                 };
@@ -88,9 +84,9 @@ pub fn install(
                 let m = FirefoxHostManifest {
                     name: host_name,
                     description,
-                    path: exe_path
-                        .to_str()
-                        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "exe_path is not valid UTF-8"))?,
+                    path: exe_path.to_str().ok_or_else(|| {
+                        io::Error::new(io::ErrorKind::InvalidInput, "exe_path is not valid UTF-8")
+                    })?,
                     ty: "stdio",
                     allowed_extensions: firefox_allowed_extensions.to_vec(),
                 };
@@ -109,7 +105,11 @@ pub fn install(
         {
             if cfg.windows_registry {
                 let key_path = paths::winreg_key_path(browser_key, scope, host_name)?;
-                crate::install::winreg::write_manifest_path_to_reg(scope, &key_path, &manifest_path)?;
+                crate::install::winreg::write_manifest_path_to_reg(
+                    scope,
+                    &key_path,
+                    &manifest_path,
+                )?;
             }
         }
     }
@@ -120,8 +120,6 @@ pub fn install(
 /// Remove manifests + registry keys for the given browser keys.
 pub fn remove(host_name: &str, browsers: &[&str], scope: paths::Scope) -> io::Result<()> {
     for browser_key in browsers {
-        let cfg = paths::browser_cfg(browser_key)?;
-
         // Remove file (best-effort if missing)
         let manifest_path = paths::manifest_path(browser_key, scope, host_name)?;
         if manifest_path.exists() {
@@ -131,6 +129,7 @@ pub fn remove(host_name: &str, browsers: &[&str], scope: paths::Scope) -> io::Re
         // Remove registry pointer if configured.
         #[cfg(windows)]
         {
+            let cfg = paths::browser_cfg(browser_key)?;
             if cfg.windows_registry {
                 let key_path = paths::winreg_key_path(browser_key, scope, host_name)?;
                 crate::install::winreg::remove_manifest_reg(scope, &key_path).ok();
@@ -139,7 +138,6 @@ pub fn remove(host_name: &str, browsers: &[&str], scope: paths::Scope) -> io::Re
     }
     Ok(())
 }
-
 /// Verify installation for a host across browsers.
 /// - If `browsers` is None, checks all configured browsers in `browsers.toml`.
 /// - On Windows, if `windows_registry=true`, verification is registry-aware.
@@ -150,7 +148,11 @@ pub fn verify_installed(
 ) -> io::Result<bool> {
     let keys: Vec<&str> = match browsers {
         Some(list) => list.to_vec(),
-        None => paths::config().browsers.keys().map(|k| k.as_str()).collect(),
+        None => paths::config()
+            .browsers
+            .keys()
+            .map(|k| k.as_str())
+            .collect(),
     };
 
     for browser_key in keys {
@@ -185,7 +187,10 @@ fn verify_one(browser_key: &str, host_name: &str, scope: paths::Scope) -> io::Re
 
     let data = fs::read_to_string(&manifest_path)?;
     let v: Value = serde_json::from_str(&data).map_err(|e| {
-        io::Error::new(io::ErrorKind::InvalidData, format!("invalid JSON manifest: {e}"))
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid JSON manifest: {e}"),
+        )
     })?;
 
     validate_manifest_json(&v, &cfg.family, host_name)
@@ -209,7 +214,11 @@ fn validate_manifest_json(v: &Value, family: &str, expected_name: &str) -> io::R
 
     match family {
         "chromium" => {
-            if obj.get("allowed_origins").and_then(|x| x.as_array()).is_none() {
+            if obj
+                .get("allowed_origins")
+                .and_then(|x| x.as_array())
+                .is_none()
+            {
                 return Ok(false);
             }
             if obj.contains_key("allowed_extensions") {
@@ -217,7 +226,11 @@ fn validate_manifest_json(v: &Value, family: &str, expected_name: &str) -> io::R
             }
         }
         "firefox" => {
-            if obj.get("allowed_extensions").and_then(|x| x.as_array()).is_none() {
+            if obj
+                .get("allowed_extensions")
+                .and_then(|x| x.as_array())
+                .is_none()
+            {
                 return Ok(false);
             }
             if obj.contains_key("allowed_origins") {

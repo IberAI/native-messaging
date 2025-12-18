@@ -1,11 +1,11 @@
-pub mod paths;
 pub mod manifest;
+pub mod paths;
 
 #[cfg(windows)]
 pub mod winreg;
 
-pub use paths::*;
 pub use manifest::*;
+pub use paths::*;
 
 #[cfg(windows)]
 pub use winreg::*;

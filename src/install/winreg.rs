@@ -1,4 +1,7 @@
-use std::{io, path::{Path, PathBuf}};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 use winreg::{enums::*, RegKey};
 
 use crate::install::paths::Scope;
@@ -20,7 +23,11 @@ pub fn read_manifest_path_from_reg(scope: Scope, key_path: &str) -> io::Result<O
 }
 
 /// Create/update the registry key and set its (Default) value to the manifest JSON path.
-pub fn write_manifest_path_to_reg(scope: Scope, key_path: &str, manifest_path: &Path) -> io::Result<()> {
+pub fn write_manifest_path_to_reg(
+    scope: Scope,
+    key_path: &str,
+    manifest_path: &Path,
+) -> io::Result<()> {
     let root = match scope {
         Scope::User => RegKey::predef(HKEY_CURRENT_USER),
         Scope::System => RegKey::predef(HKEY_LOCAL_MACHINE),
