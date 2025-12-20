@@ -1,31 +1,72 @@
 [package]
-name = "native_messaging"                 
-version = "0.1.3" 
-edition = "2021"                           
+name = "native_messaging"
+version = "0.2.0"
+edition = "2021"
 authors = ["Ilteber 'Iber' Dover <ilteber.dover@gmail.com>"]
-
-description = "Async implementation of MDN native messaging. Provides the ability to install host manifest."
-license = "MIT" 
-repository = "https://github.com/IberAI/native-messaging" 
+description = "Cross-platform Rust native messaging host for browser extensions (Chrome & Firefox), with async helpers and manifest installer."
+license = "MIT"
+repository = "https://github.com/IberAI/native-messaging"
+homepage = "https://github.com/IberAI/native-messaging"
 documentation = "https://docs.rs/native-messaging"
-homepage = "https://github.com/IberAI/native-messaging" 
-keywords = ["native-messaging", "webextensions", "chrome", "firefox"]
-categories = ["api-bindings", "command-line-utilities"]
 readme = "README.md"
+keywords = [
+    "native-messaging",
+    "browser-extension",
+    "webextensions",
+    "chrome-extension",
+    "firefox-addon",
+    "ipc"
+]
+categories = [
+    "api-bindings",
+    "command-line-utilities",
+    "asynchronous",
+    "development-tools"
+]
+[package.metadata.docs.rs]
+features = ["tokio", "install", "windows-registry"]
+no-default-features = false
+
+[features]
+# Default experience: async host helpers + installer.
+default = ["tokio", "install"]
+
+# Async host API (event_loop, Sender, spawn_reader/spawn_writer, get_message/send_message).
+tokio = ["dep:tokio"]
+
+# Manifest installer / verifier. (Config-driven browsers.toml, path resolver, etc.)
+install = ["dep:toml", "dep:once_cell"]
+
+# Optional Windows registry support for verification/installation where needed.
+# Has no effect on non-Windows targets.
+windows-registry = ["dep:winreg"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.132"
-tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt", "rt-multi-thread"] }
-toml = "0.8"
-once_cell = "1"
+
+# Keep Tokio lean: only what you need for spawn_blocking + channels + macros.
+tokio = { version = "1", optional = true, features = ["macros", "rt", "rt-multi-thread", "sync"] }
+
+# Only needed for the installer.
+toml = { version = "0.8", optional = true }
+once_cell = { version = "1", optional = true }
+
+# Only for Windows registry support (feature-gated)
+[target.'cfg(windows)'.dependencies]
+winreg = { version = "0.52", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
 serial_test = "3"
 serde_json = "1"
-tokio = { version = "1", features = ["full"] }
 
-# only for Windows registry support
-[target.'cfg(windows)'.dependencies]
-winreg = "0.52"
+# Keep test tokio lean too (avoid "full").
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", "sync"] }
+
+[profile.release]
+# Smaller + faster binaries (good for native host executables).
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
