@@ -40,7 +40,7 @@
 //! ## Crate layout
 //!
 //! - [`host`] — framing + stdio helpers + a high-level async event loop.
-//! - [`install`] — config-driven browser manifest install/verify/remove.
+//! - [`mod@install`] — config-driven browser manifest install/verify/remove.
 //!
 //! ---
 //!
@@ -328,7 +328,7 @@
 //! This crate re-exports the most common entry points at the crate root for convenience:
 //!
 //! - Host helpers: [`encode_message`], [`get_message`], [`send_message`], [`event_loop`]
-//! - Installer helpers: [`install`], [`verify_installed`], [`remove`], and [`Scope`]
+//! - Installer helpers: [`install()`], [`verify_installed`], [`remove`], and [`Scope`]
 //!
 //! For more advanced control (framing, typed decoding, sender handle, and error variants),
 //! see the [`host`] module directly.
