@@ -270,7 +270,7 @@ pub async fn send_message<T: Serialize>(msg: &T) -> Result<(), NmError> {
 /// A handle you can clone and use inside handlers to send replies safely.
 #[derive(Clone)]
 pub struct Sender {
-    writer: tokio::sync::mpsc::Sender<Vec<u8>>,
+    pub writer: tokio::sync::mpsc::Sender<Vec<u8>>,
 }
 
 impl Sender {
