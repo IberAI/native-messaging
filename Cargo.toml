@@ -1,6 +1,6 @@
 [package]
 name = "native_messaging"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Ilteber 'Iber' Dover <ilteber.dover@gmail.com>"]
 description = "Cross-platform Rust native messaging host for browser extensions (Chrome & Firefox), with async helpers and manifest installer."
@@ -27,8 +27,9 @@ features = ["tokio", "install", "windows-registry"]
 no-default-features = false
 
 [features]
-# Default experience: async host helpers + installer.
-default = ["tokio", "install"]
+# Default experience: async host helpers + installer, including Windows
+# registry integration when compiling for Windows.
+default = ["tokio", "install", "windows-registry"]
 
 # Async host API (event_loop, Sender, spawn_reader/spawn_writer, get_message/send_message).
 tokio = ["dep:tokio"]
@@ -38,7 +39,7 @@ install = ["dep:toml", "dep:once_cell"]
 
 # Optional Windows registry support for verification/installation where needed.
 # Has no effect on non-Windows targets.
-windows-registry = ["dep:winreg"]
+windows-registry = ["install", "dep:winreg"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -48,12 +49,12 @@ serde_json = "1.0.132"
 tokio = { version = "1", optional = true, features = ["macros", "rt", "rt-multi-thread", "sync"] }
 
 # Only needed for the installer.
-toml = { version = "0.8", optional = true }
+toml = { version = "1.1", optional = true }
 once_cell = { version = "1", optional = true }
 
 # Only for Windows registry support (feature-gated)
 [target.'cfg(windows)'.dependencies]
-winreg = { version = "0.52", optional = true }
+winreg = { version = "0.56", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -65,7 +66,9 @@ tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", 
 
 [profile.release]
 # Smaller + faster binaries (good for native host executables).
+opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"
+debug = false
 strip = true

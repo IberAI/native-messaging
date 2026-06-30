@@ -1,8 +1,11 @@
+#![cfg(feature = "install")]
+
 mod common;
 
 use native_messaging::install::manifest::{install, remove, verify_installed};
 use native_messaging::install::paths;
 use native_messaging::Scope;
+use serial_test::serial;
 
 use std::path::PathBuf;
 
@@ -21,6 +24,7 @@ fn dummy_exe_path() -> PathBuf {
 }
 
 #[test]
+#[serial]
 fn install_then_remove_user_scope_selected_browsers() {
     let (_td, _env) = common::sandbox_env();
 
@@ -72,4 +76,12 @@ fn install_then_remove_user_scope_selected_browsers() {
             assert!(!p.exists(), "manifest should be removed for {b}: {p:?}");
         }
     }
+}
+
+#[test]
+#[serial]
+fn verify_all_configured_browsers_skips_platform_specific_missing_scopes() {
+    let (_td, _env) = common::sandbox_env();
+
+    assert!(!verify_installed("com.example.notinstalled", None, Scope::User).unwrap());
 }

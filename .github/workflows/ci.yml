@@ -5,14 +5,28 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
-    name: fmt • clippy • test • doc • ${{ matrix.os }}
+    name: test • ${{ matrix.os }} • ${{ matrix.features.name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        features:
+          - name: default
+            args: ""
+          - name: all-features
+            args: "--all-features"
+          - name: no-default-features
+            args: "--no-default-features"
 
     env:
       CARGO_TERM_COLOR: always
@@ -29,17 +43,75 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.features.name }}
 
-      - name: rustfmt (check)
+      - name: Tests
+        run: cargo test ${{ matrix.features.args }} --all-targets --no-fail-fast
+
+  quality:
+    name: fmt • clippy • docs • package
+    runs-on: ubuntu-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+      RUSTDOCFLAGS: -D warnings
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable + components)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: quality
+
+      - name: rustfmt
         run: cargo fmt --all -- --check
 
-      - name: clippy (deny warnings)
+      - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Tests (all targets)
-        run: cargo test --all-features --all-targets --no-fail-fast
-
-      - name: Build docs (fail on warnings)
-        env:
-          RUSTDOCFLAGS: -D warnings
+      - name: Docs (all features)
         run: cargo doc --no-deps --all-features
+
+      - name: Docs (no default features)
+        run: cargo doc --no-deps --no-default-features
+
+      - name: Release check
+        run: cargo check --release --all-features
+
+      - name: Package verification
+        run: cargo package
+
+  windows-registry:
+    name: windows registry feature
+    runs-on: windows-latest
+
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: 0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-registry
+
+      - name: Check install + registry features
+        run: cargo check --no-default-features --features install,windows-registry --all-targets
+
+      - name: Test all features on Windows
+        run: cargo test --all-features --all-targets --no-fail-fast

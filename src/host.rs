@@ -6,8 +6,14 @@
 //! - Structured errors with actionable messages
 //! - Sync helpers for Read/Write
 //! - Tokio helpers (requires tokio features: rt, sync, macros, rt-multi-thread)
+//!
+//! The synchronous framing helpers are always available. The background reader,
+//! writer, one-shot stdin/stdout helpers, `Sender`, and `event_loop` are
+//! available only when the crate's `tokio` feature is enabled.
 
 use serde::{de::DeserializeOwned, Serialize};
+#[cfg(feature = "tokio")]
+use std::thread;
 use std::{
     error::Error as StdError,
     fmt,
@@ -26,10 +32,20 @@ pub enum NmError {
     Disconnected,
 
     /// Outgoing payload too large for the browser’s limit.
-    OutgoingTooLarge { len: usize, max: usize },
+    OutgoingTooLarge {
+        /// Serialized JSON payload length in bytes.
+        len: usize,
+        /// Maximum allowed outgoing payload length in bytes.
+        max: usize,
+    },
 
     /// Incoming payload too large (either user max_size or hard cap).
-    IncomingTooLarge { len: usize, max: usize },
+    IncomingTooLarge {
+        /// Claimed incoming payload length in bytes.
+        len: usize,
+        /// Maximum allowed incoming payload length in bytes.
+        max: usize,
+    },
 
     /// Invalid UTF-8 in the incoming JSON bytes.
     IncomingNotUtf8(std::string::FromUtf8Error),
@@ -41,9 +57,11 @@ pub enum NmError {
     DeserializeJson(serde_json::Error),
 
     /// Tokio join error (if awaiting a JoinHandle).
+    #[cfg(feature = "tokio")]
     TokioJoin(tokio::task::JoinError),
 
     /// Oneshot receive error (sender dropped before sending).
+    #[cfg(feature = "tokio")]
     OneshotRecv(tokio::sync::oneshot::error::RecvError),
 
     /// Underlying I/O error.
@@ -68,7 +86,9 @@ impl fmt::Display for NmError {
             IncomingNotUtf8(e) => write!(f, "incoming native message is not valid UTF-8: {e}"),
             SerializeJson(e) => write!(f, "failed to serialize JSON: {e}"),
             DeserializeJson(e) => write!(f, "failed to deserialize JSON: {e}"),
+            #[cfg(feature = "tokio")]
             TokioJoin(e) => write!(f, "internal task join error: {e}"),
+            #[cfg(feature = "tokio")]
             OneshotRecv(e) => write!(f, "internal oneshot receive error: {e}"),
             Io(e) => write!(f, "I/O error: {e}"),
         }
@@ -82,7 +102,9 @@ impl StdError for NmError {
             IncomingNotUtf8(e) => Some(e),
             SerializeJson(e) => Some(e),
             DeserializeJson(e) => Some(e),
+            #[cfg(feature = "tokio")]
             TokioJoin(e) => Some(e),
+            #[cfg(feature = "tokio")]
             OneshotRecv(e) => Some(e),
             Io(e) => Some(e),
             _ => None,
@@ -126,13 +148,14 @@ pub fn decode_message_opt<R: Read>(
 ) -> Result<Option<String>, NmError> {
     let cap = max_size.min(MAX_FROM_BROWSER);
 
-    // Read len prefix with clean EOF handling:
     let mut len_buf = [0u8; 4];
-    match reader.read_exact(&mut len_buf) {
-        Ok(()) => {}
-        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+    match reader.read(&mut len_buf[..1]) {
+        Ok(0) => return Ok(None),
+        Ok(1) => {}
+        Ok(_) => unreachable!("single-byte buffer cannot read more than one byte"),
         Err(e) => return Err(NmError::Io(e)),
     }
+    reader.read_exact(&mut len_buf[1..]).map_err(NmError::Io)?;
 
     let len = u32::from_ne_bytes(len_buf) as usize;
     if len > cap {
@@ -187,10 +210,15 @@ pub fn send_json<T: Serialize, W: Write>(writer: &mut W, msg: &T) -> Result<(), 
 ///
 /// Returns a receiver that yields `Ok(String)` messages, or `Err(NmError)` on failure.
 /// On EOF, it sends `Err(NmError::Disconnected)` and then ends.
+///
+/// The reader uses a dedicated OS thread because native messaging stdin is a
+/// long-lived blocking stream. This avoids occupying Tokio's blocking pool for
+/// the lifetime of the host.
+#[cfg(feature = "tokio")]
 pub fn spawn_reader(max_size: usize) -> tokio::sync::mpsc::Receiver<Result<String, NmError>> {
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<String, NmError>>(32);
 
-    tokio::task::spawn_blocking(move || {
+    thread::spawn(move || {
         let mut stdin = io::stdin();
         loop {
             match decode_message_opt(&mut stdin, max_size) {
@@ -216,10 +244,15 @@ pub fn spawn_reader(max_size: usize) -> tokio::sync::mpsc::Receiver<Result<Strin
 }
 
 /// Spawn a background writer that accepts already-framed bytes.
+///
+/// The writer uses a dedicated OS thread because native messaging stdout is a
+/// long-lived blocking stream. Use [`Sender`] or the returned channel to queue
+/// frames without writing to stdout from async tasks directly.
+#[cfg(feature = "tokio")]
 pub fn spawn_writer() -> tokio::sync::mpsc::Sender<Vec<u8>> {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
 
-    tokio::task::spawn_blocking(move || {
+    thread::spawn(move || {
         let mut stdout = io::stdout();
 
         while let Some(frame) = rx.blocking_recv() {
@@ -239,6 +272,7 @@ pub fn spawn_writer() -> tokio::sync::mpsc::Sender<Vec<u8>> {
 /// Read one message asynchronously (spawns one blocking task).
 ///
 /// If you call this in a loop, prefer `spawn_reader` to avoid spawn-per-message overhead.
+#[cfg(feature = "tokio")]
 pub async fn get_message() -> Result<String, NmError> {
     let (tx, rx) = tokio::sync::oneshot::channel::<Result<String, NmError>>();
 
@@ -254,6 +288,7 @@ pub async fn get_message() -> Result<String, NmError> {
 /// Send one message asynchronously (spawns one blocking task).
 ///
 /// If you send frequently, prefer `spawn_writer` and use `Sender`.
+#[cfg(feature = "tokio")]
 pub async fn send_message<T: Serialize>(msg: &T) -> Result<(), NmError> {
     let frame = encode_message(msg)?;
     let (tx, rx) = tokio::sync::oneshot::channel::<Result<(), NmError>>();
@@ -268,11 +303,14 @@ pub async fn send_message<T: Serialize>(msg: &T) -> Result<(), NmError> {
 }
 
 /// A handle you can clone and use inside handlers to send replies safely.
+#[cfg(feature = "tokio")]
 #[derive(Clone)]
 pub struct Sender {
+    /// Bounded channel used by the background stdout writer.
     pub writer: tokio::sync::mpsc::Sender<Vec<u8>>,
 }
 
+#[cfg(feature = "tokio")]
 impl Sender {
     /// Send any JSON-serializable value to the browser.
     pub async fn send<T: Serialize>(&self, msg: &T) -> Result<(), NmError> {
@@ -294,6 +332,7 @@ impl Sender {
 /// `handler` receives:
 /// - the raw JSON string
 /// - a `Sender` to respond
+#[cfg(feature = "tokio")]
 pub async fn event_loop<F, Fut>(mut handler: F) -> Result<(), NmError>
 where
     F: FnMut(String, Sender) -> Fut + Send + 'static,

@@ -28,7 +28,6 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      # --- Derive version from tag (strip leading 'v') ---
       - name: Derive version from tag
         id: ver
         shell: bash
@@ -38,7 +37,6 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      # --- Safety: ensure Cargo.toml version matches the tag version ---
       - name: Verify Cargo.toml version matches tag
         shell: bash
         run: |
@@ -48,17 +46,37 @@ jobs:
             exit 1
           fi
 
-      # --- Quality gates ---
-      - name: rustfmt (check)
+      - name: rustfmt
         run: cargo fmt --all -- --check
 
-      - name: clippy (deny warnings)
+      - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Tests
-        run: cargo test --all-features --all-targets
+      - name: Tests (all features)
+        run: cargo test --all-features --all-targets --no-fail-fast
 
-      # --- Create GitHub Release (auto date) ---
+      - name: Tests (no default features)
+        run: cargo test --no-default-features --all-targets --no-fail-fast
+
+      - name: Docs (all features)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --all-features
+
+      - name: Docs (no default features)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --no-default-features
+
+      - name: Release check
+        run: cargo check --release --all-features
+
+      - name: Package verification
+        run: cargo package
+
+      - name: Publish dry run
+        run: cargo publish --dry-run
+
       - name: Compute release date (UTC)
         id: date
         run: echo "date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
@@ -83,8 +101,7 @@ jobs:
             native_messaging = "${{ steps.ver.outputs.version }}"
             ```
 
-      # --- Publish to crates.io ---
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --locked
+        run: cargo publish

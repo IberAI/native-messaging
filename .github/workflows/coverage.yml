@@ -5,6 +5,13 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   llvm-cov:
     name: llvm-cov (ubuntu)
@@ -23,6 +30,8 @@ jobs:
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          key: coverage
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@v2
@@ -30,10 +39,10 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Run coverage (LCOV)
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: cargo llvm-cov --all-features --workspace --all-targets --lcov --output-path lcov.info
 
       - name: Run coverage (HTML)
-        run: cargo llvm-cov --all-features --workspace --html --output-dir target/llvm-cov/html
+        run: cargo llvm-cov --all-features --workspace --all-targets --html --output-dir target/llvm-cov/html
 
       # Upload to Codecov only if you enable it for the repo.
       - name: Upload LCOV to Codecov

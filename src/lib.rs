@@ -30,7 +30,9 @@
 //!   typically closes the host’s stdin. Treat [`host::NmError::Disconnected`] as a normal shutdown.
 //! - **Message limits:**
 //!   - Host → browser: this crate enforces **1 MiB** ([`host::MAX_TO_BROWSER`]).
-//!   - Browser → host: this crate enforces **64 MiB** ([`host::MAX_FROM_BROWSER`]) to match Chrome’s documented limit.
+//!   - Browser → host: this crate enforces **64 MiB** ([`host::MAX_FROM_BROWSER`]) by default,
+//!     matching Chrome’s documented limit. Firefox and Microsoft Edge document larger inbound
+//!     limits, but 64 MiB is the conservative cross-browser default.
 //! - **Never log to stdout:** stdout is reserved for framed protocol messages. Use stderr or a file.
 //! - **Manifest mismatch is the #1 failure:** “host not found” / “failed to start” is almost always
 //!   a manifest path/name/allowlist issue.
@@ -40,7 +42,8 @@
 //! ## Crate layout
 //!
 //! - [`host`] — framing + stdio helpers + a high-level async event loop.
-//! - [`mod@install`] — config-driven browser manifest install/verify/remove.
+//! - `install` — config-driven browser manifest install/verify/remove. Available with the
+//!   `install` feature, which is enabled by default.
 //!
 //! ---
 //!
@@ -126,7 +129,7 @@
 //! It also demonstrates a common best practice: **don’t crash the host** on bad input—
 //! instead, respond with an error message (or ignore invalid messages).
 //!
-//! ```no_run
+//! ```ignore
 //! use native_messaging::host::{event_loop, NmError, Sender};
 //! use serde::{Deserialize, Serialize};
 //! use serde_json::json;
@@ -199,9 +202,9 @@
 //!
 //! ## One-shot I/O (read one message, send one reply)
 //!
-//! These are convenience helpers. For production, prefer [`event_loop`].
+//! These are convenience helpers. For production, prefer `event_loop`.
 //!
-//! ```no_run
+//! ```ignore
 //! use native_messaging::{get_message, send_message};
 //! use native_messaging::host::NmError;
 //! use serde::{Deserialize, Serialize};
@@ -229,21 +232,32 @@
 //! install locations per OS and (on Windows) registry key templates.
 //!
 //! Supported browser keys in the embedded config include:
-//! - Chromium-family: `chrome`, `edge`, `chromium`, `brave`, `vivaldi`
+//! - Chromium-family: `chrome`, `chrome_for_testing`, `edge`, `edge_beta`, `edge_dev`,
+//!   `edge_canary`, `chromium`, `brave`, `vivaldi`
 //! - Firefox-family: `firefox`, `librewolf`
+//!
+//! Some keys are platform-specific. For example, Edge channel-specific keys model the macOS
+//! user-data locations documented by Microsoft Edge.
 //!
 //! The manifest allowlist fields differ by browser family:
 //!
 //! - Chromium-family uses `allowed_origins` (e.g. `chrome-extension://<EXT_ID>/`)
 //! - Firefox-family uses `allowed_extensions` (your addon ID, often email-like)
 //!
+//! The installer validates browser-specific host-name and allowlist rules before writing manifests.
+//! Chromium-family host names must be lowercase; Firefox-family host names may include uppercase
+//! ASCII letters.
+//!
+//! `paths::manifest_path` returns the primary install path for a browser key. Use
+//! `paths::manifest_paths` if you need every configured lookup path for verification or cleanup.
+//!
 //! ### Scope and permissions
 //!
-//! - [`Scope::User`] installs into the current user’s profile locations (recommended for development
+//! - `Scope::User` installs into the current user’s profile locations (recommended for development
 //!   and for most desktop apps).
 //! - System-wide installs may require elevated privileges depending on OS and target locations.
 //!
-//! ```no_run
+//! ```ignore
 //! use std::path::Path;
 //! use native_messaging::{install, Scope};
 //!
@@ -278,16 +292,27 @@
 //!
 //! ### Verify installation
 //!
-//! ```no_run
+//! ```ignore
 //! use native_messaging::{verify_installed, Scope};
 //!
 //! let ok = verify_installed("com.example.host", None, Scope::User).unwrap();
 //! assert!(ok);
 //! ```
 //!
+//! ### Inspect manifest paths
+//!
+//! ```ignore
+//! use native_messaging::{manifest_paths, Scope};
+//!
+//! let paths = manifest_paths("firefox", Scope::System, "com.example.host").unwrap();
+//! for path in paths {
+//!     eprintln!("{}", path.display());
+//! }
+//! ```
+//!
 //! ### Remove a manifest
 //!
-//! ```no_run
+//! ```ignore
 //! use native_messaging::{remove, Scope};
 //!
 //! remove("com.example.host", &["chrome", "firefox", "edge"], Scope::User).unwrap();
@@ -319,7 +344,7 @@
 //!
 //! ### 4) My host works once and then stops
 //! This usually means you read only one message and exited.
-//! Prefer [`event_loop`] for hosts meant to stay running.
+//! Prefer `event_loop` for hosts meant to stay running.
 //!
 //! ---
 //!
@@ -327,31 +352,42 @@
 //!
 //! This crate re-exports the most common entry points at the crate root for convenience:
 //!
-//! - Host helpers: [`encode_message`], [`get_message`], [`send_message`], [`event_loop`]
-//! - Installer helpers: [`install()`], [`verify_installed`], [`remove`], and [`Scope`]
+//! - Host helpers: [`encode_message`], `get_message`, `send_message`, and `event_loop`
+//! - Installer helpers: `install()`, `verify_installed`, `remove`,
+//!   `manifest_path`, `manifest_paths`, and `Scope`
 //!
 //! For more advanced control (framing, typed decoding, sender handle, and error variants),
 //! see the [`host`] module directly.
 
+#![warn(missing_docs)]
+
 pub mod host;
+#[cfg(feature = "install")]
 pub mod install;
 
 // -------- Host re-exports --------
 
 #[doc(inline)]
-pub use host::{encode_message, event_loop, get_message, send_message};
+pub use host::encode_message;
+#[cfg(feature = "tokio")]
+#[doc(inline)]
+pub use host::{event_loop, get_message, send_message};
 
 // -------- Install re-exports --------
 
 // NOTE: These must match your install module’s public symbols.
 // If you rename functions in install, update these exports accordingly.
 #[doc(inline)]
+#[cfg(feature = "install")]
 pub use install::manifest::{install, remove, verify_installed};
 #[doc(inline)]
-pub use install::paths::Scope;
+#[cfg(feature = "install")]
+pub use install::paths::{browser_supports_scope, manifest_path, manifest_paths, Scope};
 
 // Optional: module re-exports for discoverability in docs.rs navigation.
 #[doc(inline)]
+#[cfg(feature = "install")]
 pub use install::manifest;
 #[doc(inline)]
+#[cfg(feature = "install")]
 pub use install::paths;

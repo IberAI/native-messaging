@@ -72,13 +72,17 @@ async fn decode_message_returns_disconnected_on_clean_eof() {
 }
 
 #[tokio::test]
-async fn decode_message_opt_truncated_length_prefix_is_none() {
-    // If only 1–3 bytes are available for length, read_exact returns UnexpectedEof.
-    // Our decode_message_opt treats that as clean EOF (Ok(None)).
+async fn decode_message_opt_rejects_truncated_length_prefix() {
+    // Clean EOF before any prefix byte is a normal disconnect. Once any prefix
+    // byte is present, EOF means the frame is malformed/truncated.
     for n in 1..=3 {
         let mut cur = Cursor::new(vec![0u8; n]);
-        let res = decode_message_opt(&mut cur, MAX_FROM_BROWSER).expect("should not error");
-        assert!(res.is_none(), "n={n}");
+        let err = decode_message_opt(&mut cur, MAX_FROM_BROWSER)
+            .expect_err("partial length prefix should error");
+        match err {
+            NmError::Io(e) => assert_eq!(e.kind(), io::ErrorKind::UnexpectedEof, "n={n}"),
+            other => panic!("expected Io(UnexpectedEof), got: {other:?}"),
+        }
     }
 }
 

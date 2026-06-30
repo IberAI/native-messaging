@@ -1,4 +1,6 @@
 #![cfg(windows)]
+#![cfg(feature = "install")]
+#![cfg(feature = "windows-registry")]
 
 mod common;
 

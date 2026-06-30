@@ -23,6 +23,27 @@ hkcu_key_template = "Software\\Google\\Chrome\\NativeMessagingHosts\\{name}"
 hklm_key_template = "Software\\Google\\Chrome\\NativeMessagingHosts\\{name}"
 
 
+[browsers.chrome_for_testing]
+family = "chromium"
+windows_registry = true
+
+[browsers.chrome_for_testing.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Google/ChromeForTesting/NativeMessagingHosts"
+[browsers.chrome_for_testing.paths.macos.system]
+dir = "/Library/Google/ChromeForTesting/NativeMessagingHosts"
+[browsers.chrome_for_testing.paths.linux.user]
+dir = "{HOME}/.config/google-chrome-for-testing/NativeMessagingHosts"
+[browsers.chrome_for_testing.paths.linux.system]
+dir = "/etc/opt/chrome_for_testing/native-messaging-hosts"
+[browsers.chrome_for_testing.paths.windows.user]
+dir = "{LOCALAPPDATA}/NativeMessagingHosts"
+[browsers.chrome_for_testing.paths.windows.system]
+dir = "{PROGRAMDATA}/NativeMessagingHosts"
+[browsers.chrome_for_testing.windows.registry]
+hkcu_key_template = "Software\\Google\\Chrome for Testing\\NativeMessagingHosts\\{name}"
+hklm_key_template = "Software\\Google\\Chrome for Testing\\NativeMessagingHosts\\{name}"
+
+
 [browsers.edge]
 family = "chromium"
 windows_registry = true
@@ -42,6 +63,27 @@ dir = "{PROGRAMDATA}/NativeMessagingHosts"
 [browsers.edge.windows.registry]
 hkcu_key_template = "Software\\Microsoft\\Edge\\NativeMessagingHosts\\{name}"
 hklm_key_template = "Software\\Microsoft\\Edge\\NativeMessagingHosts\\{name}"
+
+
+[browsers.edge_beta]
+family = "chromium"
+
+[browsers.edge_beta.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Microsoft Edge Beta/NativeMessagingHosts"
+
+
+[browsers.edge_dev]
+family = "chromium"
+
+[browsers.edge_dev.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Microsoft Edge Dev/NativeMessagingHosts"
+
+
+[browsers.edge_canary]
+family = "chromium"
+
+[browsers.edge_canary.paths.macos.user]
+dir = "{HOME}/Library/Application Support/Microsoft Edge Canary/NativeMessagingHosts"
 
 
 [browsers.chromium]
@@ -113,6 +155,7 @@ dir = "/Library/Application Support/Mozilla/NativeMessagingHosts"
 dir = "{HOME}/.mozilla/native-messaging-hosts"
 [browsers.firefox.paths.linux.system]
 dir = "/usr/lib/mozilla/native-messaging-hosts"
+alternate_dirs = ["/usr/lib64/mozilla/native-messaging-hosts"]
 [browsers.firefox.paths.windows.user]
 dir = "{APPDATA}/Mozilla/NativeMessagingHosts"
 [browsers.firefox.paths.windows.system]
